@@ -60,7 +60,6 @@ public class FileUserPasswdStoreTests extends ESTestCase {
                 .build();
         env = TestEnvironment.newEnvironment(settings);
         threadPool = new TestThreadPool("test");
-        System.out.println(settings.get("xpack.security.authc.password_hashing.algorithm"));
     }
 
     @After
