@@ -75,8 +75,8 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
         this.anonymousEnabled = AnonymousUser.isAnonymousEnabled(settings);
         this.securityIndex = securityIndex;
 
-        this.reservedRealmHasher = HasherFactory.getHasher(XPackSettings.PASSWORD_HASHING_ALGORITHM.get(settings), XPackSettings.PASSWORD_HASHING_COST
-            .get(settings));
+        this.reservedRealmHasher = HasherFactory.getHasher(XPackSettings.PASSWORD_HASHING_ALGORITHM.get(settings),
+            XPackSettings.PASSWORD_HASHING_COST.get(settings));
         final char[] emptyPasswordHash = reservedRealmHasher.hash(new SecureString("".toCharArray()));
         disabledDefaultUserInfo = new ReservedUserInfo(emptyPasswordHash, false, true);
         enabledDefaultUserInfo = new ReservedUserInfo(emptyPasswordHash, true, true);
