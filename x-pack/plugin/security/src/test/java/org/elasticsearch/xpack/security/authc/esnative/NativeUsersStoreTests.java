@@ -27,6 +27,7 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 import org.elasticsearch.xpack.core.security.user.BeatsSystemUser;
 import org.elasticsearch.xpack.core.security.user.ElasticUser;
 import org.elasticsearch.xpack.core.security.user.KibanaUser;
@@ -214,9 +215,10 @@ public class NativeUsersStoreTests extends ESTestCase {
     }
 
     private void respondToGetUserRequest(String username, SecureString password, String[] roles) throws IOException {
+        final Hasher hasher = HasherFactory.getHasher("bcrypt");
         final Map<String, Object> values = new HashMap<>();
         values.put(User.Fields.USERNAME.getPreferredName(), username);
-        values.put(User.Fields.PASSWORD.getPreferredName(), String.valueOf(Hasher.BCRYPT.hash(password)));
+        values.put(User.Fields.PASSWORD.getPreferredName(), String.valueOf(hasher.hash(password)));
         values.put(User.Fields.ROLES.getPreferredName(), roles);
         values.put(User.Fields.ENABLED.getPreferredName(), Boolean.TRUE);
         values.put(User.Fields.TYPE.getPreferredName(), NativeUsersStore.USER_DOC_TYPE);

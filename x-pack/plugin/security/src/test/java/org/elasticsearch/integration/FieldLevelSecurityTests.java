@@ -7,7 +7,6 @@ package org.elasticsearch.integration;
 
 import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.ElasticsearchSecurityException;
-import org.elasticsearch.Version;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.get.GetResponse;
@@ -25,7 +24,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexModule;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.indices.IndicesRequestCache;
@@ -38,7 +36,9 @@ import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.SecurityIntegTestCase;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.xpack.core.XPackSettings;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 import org.elasticsearch.xpack.security.LocalStateSecurity;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
 
@@ -68,8 +68,10 @@ import static org.hamcrest.Matchers.nullValue;
 @ESIntegTestCase.ClusterScope
 public class FieldLevelSecurityTests extends SecurityIntegTestCase {
 
+    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+
     protected static final SecureString USERS_PASSWD = new SecureString("change_me".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(Hasher.BCRYPT.hash(new SecureString("change_me".toCharArray())));
+    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("change_me".toCharArray())));
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -84,6 +86,7 @@ public class FieldLevelSecurityTests extends SecurityIntegTestCase {
 
     @Override
     protected String configUsers() {
+
         return super.configUsers() +
                 "user1:" + USERS_PASSWD_HASHED + "\n" +
                 "user2:" + USERS_PASSWD_HASHED + "\n" +

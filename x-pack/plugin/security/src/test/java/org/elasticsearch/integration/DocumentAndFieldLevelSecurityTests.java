@@ -21,8 +21,10 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.indices.IndicesModule;
 import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.test.SecurityIntegTestCase;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,8 +41,9 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class DocumentAndFieldLevelSecurityTests extends SecurityIntegTestCase {
 
+    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
     protected static final SecureString USERS_PASSWD = new SecureString("change_me".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(Hasher.BCRYPT.hash(USERS_PASSWD));
+    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(USERS_PASSWD));
 
     @Override
     protected String configUsers() {

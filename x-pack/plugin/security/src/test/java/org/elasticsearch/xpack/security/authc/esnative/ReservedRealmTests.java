@@ -20,6 +20,7 @@ import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.esnative.ClientReservedRealm;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 import org.elasticsearch.xpack.core.security.authc.support.UsernamePasswordToken;
 import org.elasticsearch.xpack.core.security.user.AnonymousUser;
 import org.elasticsearch.xpack.core.security.user.BeatsSystemUser;
@@ -124,10 +125,11 @@ public class ReservedRealmTests extends ESTestCase {
         final User expectedUser = randomReservedUser(enabled);
         final String principal = expectedUser.principal();
         final SecureString newPassword = new SecureString("foobar".toCharArray());
+        final Hasher hasher = HasherFactory.getHasher("bcrypt");
         when(securityIndex.indexExists()).thenReturn(true);
         doAnswer((i) -> {
             ActionListener callback = (ActionListener) i.getArguments()[1];
-            callback.onResponse(new ReservedUserInfo(Hasher.BCRYPT.hash(newPassword), enabled, false));
+            callback.onResponse(new ReservedUserInfo(hasher.hash(newPassword), enabled, false));
             return null;
         }).when(usersStore).getReservedUserInfo(eq(principal), any(ActionListener.class));
 
@@ -139,7 +141,7 @@ public class ReservedRealmTests extends ESTestCase {
         // the realm assumes it owns the hashed password so it fills it with 0's
         doAnswer((i) -> {
             ActionListener callback = (ActionListener) i.getArguments()[1];
-            callback.onResponse(new ReservedUserInfo(Hasher.BCRYPT.hash(newPassword), true, false));
+            callback.onResponse(new ReservedUserInfo(hasher.hash(newPassword), true, false));
             return null;
         }).when(usersStore).getReservedUserInfo(eq(principal), any(ActionListener.class));
 
@@ -275,7 +277,8 @@ public class ReservedRealmTests extends ESTestCase {
     public void testFailedAuthentication() throws Exception {
         when(securityIndex.indexExists()).thenReturn(true);
         SecureString password = new SecureString("password".toCharArray());
-        char[] hash = Hasher.BCRYPT.hash(password);
+        final Hasher hasher = HasherFactory.getHasher("bcrypt");
+        char[] hash = hasher.hash(password);
         ReservedUserInfo userInfo = new ReservedUserInfo(hash, true, false);
         mockGetAllReservedUserInfo(usersStore, Collections.singletonMap("elastic", userInfo));
         final ReservedRealm reservedRealm = new ReservedRealm(mock(Environment.class), Settings.EMPTY, usersStore,
@@ -334,9 +337,10 @@ public class ReservedRealmTests extends ESTestCase {
                 new AnonymousUser(Settings.EMPTY), securityIndex, threadPool);
         PlainActionFuture<AuthenticationResult> listener = new PlainActionFuture<>();
         SecureString password = new SecureString("password".toCharArray());
+        final Hasher hasher = HasherFactory.getHasher("bcrypt");
         doAnswer((i) -> {
             ActionListener callback = (ActionListener) i.getArguments()[1];
-            char[] hash = Hasher.BCRYPT.hash(password);
+            char[] hash = hasher.hash(password);
             ReservedUserInfo userInfo = new ReservedUserInfo(hash, true, false);
             callback.onResponse(userInfo);
             return null;

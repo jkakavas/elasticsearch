@@ -9,9 +9,11 @@ import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
 import org.elasticsearch.test.SecurityIntegTestCase;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 
 import java.util.Collections;
 
@@ -23,8 +25,9 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class IndicesPermissionsWithAliasesWildcardsAndRegexsTests extends SecurityIntegTestCase {
 
+    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
     protected static final SecureString USERS_PASSWD = new SecureString("change_me".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(Hasher.BCRYPT.hash(new SecureString("change_me".toCharArray())));
+    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("change_me".toCharArray())));
 
     @Override
     protected String configUsers() {

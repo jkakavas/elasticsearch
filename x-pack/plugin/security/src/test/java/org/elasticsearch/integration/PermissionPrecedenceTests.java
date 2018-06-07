@@ -13,7 +13,9 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexTemplateMetaData;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.test.SecurityIntegTestCase;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 import org.elasticsearch.xpack.core.security.authc.support.UsernamePasswordToken;
 
 import java.util.Collections;
@@ -33,7 +35,8 @@ import static org.hamcrest.Matchers.hasSize;
  * index template actions.
  */
 public class PermissionPrecedenceTests extends SecurityIntegTestCase {
-    protected static final String USERS_PASSWD_HASHED = new String(Hasher.BCRYPT.hash(new SecureString("test123".toCharArray())));
+    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("test123".toCharArray())));
 
     @Override
     protected String configRoles() {

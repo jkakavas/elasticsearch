@@ -16,6 +16,7 @@ import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
 import org.elasticsearch.test.SecurityIntegTestCase;
 import org.elasticsearch.test.SecuritySettingsSource;
+import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 
 import java.util.Collections;
 
@@ -28,8 +29,10 @@ import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFa
 import static org.hamcrest.Matchers.is;
 
 public class MultipleIndicesPermissionsTests extends SecurityIntegTestCase {
+
+    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
     protected static final SecureString PASSWD = new SecureString("passwd".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(Hasher.BCRYPT.hash(PASSWD));
+    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(PASSWD));
 
     @Override
     protected String configRoles() {
