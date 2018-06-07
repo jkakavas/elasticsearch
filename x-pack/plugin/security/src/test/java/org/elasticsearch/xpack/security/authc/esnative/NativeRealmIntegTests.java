@@ -423,7 +423,8 @@ public class NativeRealmIntegTests extends NativeRealmIntegTestCase {
         assertThat(client.prepareGetUsers("joes").get().hasUsers(), is(false));
 
         // create joe with a password and verify the user works
-        client.preparePutUser("joe", SecuritySettingsSourceField.TEST_PASSWORD.toCharArray(), SecuritySettingsSource.HASHING_ALGORITHM, "admin_role").get();
+        client.preparePutUser("joe", SecuritySettingsSourceField.TEST_PASSWORD.toCharArray(),
+            SecuritySettingsSource.HASHING_ALGORITHM, "admin_role").get();
         assertThat(client.prepareGetUsers("joe").get().hasUsers(), is(true));
         final String token = basicAuthHeaderValue("joe", SecuritySettingsSourceField.TEST_PASSWORD_SECURE_STRING);
         ClusterHealthResponse response = client().filterWithHeader(Collections.singletonMap("Authorization", token)).admin().cluster()
@@ -452,7 +453,8 @@ public class NativeRealmIntegTests extends NativeRealmIntegTestCase {
 
         // update the user with password and admin role again
         String secondPassword = SecuritySettingsSourceField.TEST_PASSWORD + "2";
-        client.preparePutUser("joe", secondPassword.toCharArray(), SecuritySettingsSource.HASHING_ALGORITHM, "admin_role").fullName("Joe Smith").get();
+        client.preparePutUser("joe", secondPassword.toCharArray(), SecuritySettingsSource.HASHING_ALGORITHM, "admin_role").
+            fullName("Joe Smith").get();
         getUsersResponse = client.prepareGetUsers("joe").get();
         assertThat(getUsersResponse.hasUsers(), is(true));
         assertThat(getUsersResponse.users().length, is(1));
@@ -549,7 +551,8 @@ public class NativeRealmIntegTests extends NativeRealmIntegTestCase {
         assertThat(exception.getMessage(), containsString("user [" + SystemUser.NAME + "] is internal"));
 
         exception = expectThrows(IllegalArgumentException.class,
-            () -> securityClient().prepareChangePassword(SystemUser.NAME, "foobar".toCharArray(), SecuritySettingsSource.HASHING_ALGORITHM).get());
+            () -> securityClient().prepareChangePassword(SystemUser.NAME, "foobar".toCharArray(),
+                SecuritySettingsSource.HASHING_ALGORITHM).get());
         assertThat(exception.getMessage(), containsString("user [" + SystemUser.NAME + "] is internal"));
 
         exception = expectThrows(IllegalArgumentException.class,
