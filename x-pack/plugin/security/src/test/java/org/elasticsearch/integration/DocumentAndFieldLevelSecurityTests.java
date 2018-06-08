@@ -147,7 +147,6 @@ public class DocumentAndFieldLevelSecurityTests extends SecurityIntegTestCase {
     }
 
     public void testDLSIsAppliedBeforeFLS() {
-        System.out.println(internalCluster().getInstance(Settings.class).get("xpack.security.authc.password_hashing.algorithm"));
         assertAcked(client().admin().indices().prepareCreate("test")
                 .addMapping("type1", "field1", "type=text", "field2", "type=text")
         );
