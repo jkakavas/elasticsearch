@@ -83,8 +83,8 @@ public class NativeUsersStore extends AbstractComponent {
     public static final String RESERVED_USER_TYPE = "reserved-user";
     private final Hasher hasher;
     private final Client client;
-    final ReservedUserInfo disabledDefaultUserInfo;
-    final ReservedUserInfo enabledDefaultUserInfo;
+    private final ReservedUserInfo disabledDefaultUserInfo;
+    private final ReservedUserInfo enabledDefaultUserInfo;
 
     private final SecurityIndexManager securityIndex;
 

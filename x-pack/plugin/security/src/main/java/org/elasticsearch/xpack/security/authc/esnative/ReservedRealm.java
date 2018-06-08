@@ -50,7 +50,6 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
     public static final String TYPE = "reserved";
 
     private final ReservedUserInfo bootstrapUserInfo;
-    static final char[] EMPTY_PASSWORD_HASH = HasherFactory.getHasher("bcrypt").hash(new SecureString("".toCharArray()));
     public static final Setting<Boolean> ACCEPT_DEFAULT_PASSWORD_SETTING = Setting.boolSetting(
             SecurityField.setting("authc.accept_default_password"), true, Setting.Property.NodeScope, Setting.Property.Filtered,
             Setting.Property.Deprecated);
@@ -63,8 +62,8 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
     private final boolean anonymousEnabled;
     private final SecurityIndexManager securityIndex;
     private final Hasher reservedRealmHasher;
-    final ReservedUserInfo disabledDefaultUserInfo;
-    final ReservedUserInfo enabledDefaultUserInfo;
+    private final ReservedUserInfo disabledDefaultUserInfo;
+    private final ReservedUserInfo enabledDefaultUserInfo;
 
     public ReservedRealm(Environment env, Settings settings, NativeUsersStore nativeUsersStore, AnonymousUser anonymousUser,
                          SecurityIndexManager securityIndex, ThreadPool threadPool) {
