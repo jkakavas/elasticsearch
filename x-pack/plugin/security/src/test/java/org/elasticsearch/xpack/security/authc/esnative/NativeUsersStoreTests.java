@@ -110,6 +110,8 @@ public class NativeUsersStoreTests extends ESTestCase {
 
         final String user = randomFrom(ElasticUser.NAME, KibanaUser.NAME, LogstashSystemUser.NAME, BeatsSystemUser.NAME);
         final Map<String, Object> values = new HashMap<>();
+        //startNativeUsersStore creates a NativeUsersStore with empty settings so default hashing algorithm will be used
+        final Hasher hasher = HasherFactory.getHasher("bcrypt");
         values.put(ENABLED_FIELD, Boolean.TRUE);
         values.put(PASSWORD_FIELD, BLANK_PASSWORD);
 
@@ -130,7 +132,7 @@ public class NativeUsersStoreTests extends ESTestCase {
         final NativeUsersStore.ReservedUserInfo userInfo = future.get();
         assertThat(userInfo.hasEmptyPassword, equalTo(true));
         assertThat(userInfo.enabled, equalTo(true));
-        assertThat(userInfo.passwordHash, equalTo(ReservedRealm.EMPTY_PASSWORD_HASH));
+        assertTrue(hasher.verify(new SecureString("".toCharArray()), userInfo.passwordHash));
     }
 
     public void testVerifyUserWithCorrectPassword() throws Exception {

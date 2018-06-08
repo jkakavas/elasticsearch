@@ -348,8 +348,8 @@ public class CachingUsernamePasswordRealmTests extends ESTestCase {
         final String username = "username";
         final SecureString password = SecuritySettingsSourceField.TEST_PASSWORD_SECURE_STRING;
         final AtomicInteger authCounter = new AtomicInteger(0);
-        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
-        final String passwordHash = new String(hasher.hash(password));
+        final Hasher localHasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String passwordHash = new String(localHasher.hash(password));
         RealmConfig config = new RealmConfig("test_realm", Settings.EMPTY, globalSettings, TestEnvironment.newEnvironment(globalSettings),
             new ThreadContext(Settings.EMPTY));
         final CachingUsernamePasswordRealm realm = new CachingUsernamePasswordRealm("test", config, threadPool) {
@@ -357,7 +357,7 @@ public class CachingUsernamePasswordRealmTests extends ESTestCase {
             protected void doAuthenticate(UsernamePasswordToken token, ActionListener<AuthenticationResult> listener) {
                 authCounter.incrementAndGet();
                 // do something slow
-                if (BCrypt.checkpw(token.credentials(), passwordHash)) {
+                if (localHasher.verify(token.credentials(), passwordHash.toCharArray())) {
                     listener.onResponse(AuthenticationResult.success(new User(username, new String[]{"r1", "r2", "r3"})));
                 } else {
                     listener.onFailure(new IllegalStateException("password auth should never fail"));
@@ -414,15 +414,15 @@ public class CachingUsernamePasswordRealmTests extends ESTestCase {
         final String username = "username";
         final SecureString password = SecuritySettingsSourceField.TEST_PASSWORD_SECURE_STRING;
         final SecureString randomPassword = new SecureString(randomAlphaOfLength(password.length()).toCharArray());
-        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
-        final String passwordHash = new String(hasher.hash(password));
+        final Hasher localHasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String passwordHash = new String(localHasher.hash(password));
         RealmConfig config = new RealmConfig("test_realm", Settings.EMPTY, globalSettings, TestEnvironment.newEnvironment(globalSettings),
                 new ThreadContext(Settings.EMPTY));
         final CachingUsernamePasswordRealm realm = new CachingUsernamePasswordRealm("test", config, threadPool) {
             @Override
             protected void doAuthenticate(UsernamePasswordToken token, ActionListener<AuthenticationResult> listener) {
                 // do something slow
-                if (BCrypt.checkpw(token.credentials(), passwordHash)) {
+                if (localHasher.verify(token.credentials(), passwordHash.toCharArray())) {
                     listener.onResponse(AuthenticationResult.success(new User(username, new String[]{"r1", "r2", "r3"})));
                 } else {
                     listener.onResponse(AuthenticationResult.unsuccessful("Incorrect password", null));
