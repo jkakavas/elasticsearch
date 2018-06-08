@@ -82,9 +82,7 @@ import static org.hamcrest.Matchers.notNullValue;
 @LuceneTestCase.SuppressCodecs("*") // suppress test codecs otherwise test using completion suggester fails
 public class DocumentLevelSecurityTests extends SecurityIntegTestCase {
 
-    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
     protected static final SecureString USERS_PASSWD = new SecureString("change_me".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(USERS_PASSWD));
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -98,10 +96,12 @@ public class DocumentLevelSecurityTests extends SecurityIntegTestCase {
 
     @Override
     protected String configUsers() {
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String usersPasswdHashed = new String(hasher.hash(USERS_PASSWD));
         return super.configUsers() +
-                "user1:" + USERS_PASSWD_HASHED + "\n" +
-                "user2:" + USERS_PASSWD_HASHED + "\n" +
-                "user3:" + USERS_PASSWD_HASHED + "\n" ;
+                "user1:" + usersPasswdHashed + "\n" +
+                "user2:" + usersPasswdHashed + "\n" +
+                "user3:" + usersPasswdHashed + "\n" ;
     }
 
     @Override

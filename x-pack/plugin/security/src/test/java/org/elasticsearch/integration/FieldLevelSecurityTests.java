@@ -68,10 +68,7 @@ import static org.hamcrest.Matchers.nullValue;
 @ESIntegTestCase.ClusterScope
 public class FieldLevelSecurityTests extends SecurityIntegTestCase {
 
-    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
-
     protected static final SecureString USERS_PASSWD = new SecureString("change_me".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("change_me".toCharArray())));
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -86,16 +83,17 @@ public class FieldLevelSecurityTests extends SecurityIntegTestCase {
 
     @Override
     protected String configUsers() {
-
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String usersPasswdHashed = new String(hasher.hash(USERS_PASSWD));
         return super.configUsers() +
-                "user1:" + USERS_PASSWD_HASHED + "\n" +
-                "user2:" + USERS_PASSWD_HASHED + "\n" +
-                "user3:" + USERS_PASSWD_HASHED + "\n" +
-                "user4:" + USERS_PASSWD_HASHED + "\n" +
-                "user5:" + USERS_PASSWD_HASHED + "\n" +
-                "user6:" + USERS_PASSWD_HASHED + "\n" +
-                "user7:" + USERS_PASSWD_HASHED + "\n" +
-                "user8:" + USERS_PASSWD_HASHED + "\n";
+                "user1:" + usersPasswdHashed + "\n" +
+                "user2:" + usersPasswdHashed + "\n" +
+                "user3:" + usersPasswdHashed + "\n" +
+                "user4:" + usersPasswdHashed + "\n" +
+                "user5:" + usersPasswdHashed + "\n" +
+                "user6:" + usersPasswdHashed + "\n" +
+                "user7:" + usersPasswdHashed + "\n" +
+                "user8:" + usersPasswdHashed + "\n";
     }
 
     @Override

@@ -28,9 +28,7 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class DocumentLevelSecurityRandomTests extends SecurityIntegTestCase {
 
-    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
     protected static final SecureString USERS_PASSWD = new SecureString("change_me".toCharArray());
-    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("change_me".toCharArray())));
 
     // can't add a second test method, because each test run creates a new instance of this class and that will will result
     // in a new random value:
@@ -38,9 +36,11 @@ public class DocumentLevelSecurityRandomTests extends SecurityIntegTestCase {
 
     @Override
     protected String configUsers() {
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String usersPasswdHashed = new String(hasher.hash(USERS_PASSWD));
         StringBuilder builder = new StringBuilder(super.configUsers());
         for (int i = 1; i <= numberOfRoles; i++) {
-            builder.append("user").append(i).append(':').append(USERS_PASSWD_HASHED).append('\n');
+            builder.append("user").append(i).append(':').append(usersPasswdHashed).append('\n');
         }
         return builder.toString();
     }

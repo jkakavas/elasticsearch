@@ -680,7 +680,8 @@ public class NativeRealmIntegTests extends NativeRealmIntegTestCase {
         final int numNativeUsers = scaledRandomIntBetween(1, 32);
         SecurityClient securityClient = new SecurityClient(client());
         for (int i = 0; i < numNativeUsers; i++) {
-            securityClient.preparePutUser("joe" + i, "s3krit".toCharArray(), "superuser").get();
+            securityClient.preparePutUser("joe" + i, "s3krit".toCharArray(), SecuritySettingsSource.HASHING_ALGORITHM,
+                "superuser").get();
         }
 
         XPackUsageResponse response = new XPackUsageRequestBuilder(client()).get();
@@ -699,6 +700,7 @@ public class NativeRealmIntegTests extends NativeRealmIntegTestCase {
     }
 
     public void testSetEnabled() throws Exception {
+
         securityClient().preparePutUser("joe", "s3krit".toCharArray(), SecuritySettingsSource.HASHING_ALGORITHM,
             SecuritySettingsSource.TEST_ROLE).get();
         final String token = basicAuthHeaderValue("joe", new SecureString("s3krit".toCharArray()));

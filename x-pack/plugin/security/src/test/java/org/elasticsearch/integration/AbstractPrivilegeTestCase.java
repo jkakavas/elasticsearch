@@ -35,9 +35,6 @@ import static org.hamcrest.Matchers.not;
  */
 public abstract class AbstractPrivilegeTestCase extends SecuritySingleNodeTestCase {
 
-    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
-    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("passwd".toCharArray())));
-
     protected void assertAccessIsAllowed(String user, String method, String uri, String body,
                                          Map<String, String> params) throws IOException {
         Response response = getRestClient().performRequest(method, uri, params, entityOrNull(body),

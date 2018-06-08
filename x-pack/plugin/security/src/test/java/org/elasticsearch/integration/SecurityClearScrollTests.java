@@ -36,16 +36,16 @@ import static org.hamcrest.Matchers.is;
 
 public class SecurityClearScrollTests extends SecurityIntegTestCase {
 
-    private static final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
-    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("change_me".toCharArray())));
 
     private List<String> scrollIds;
 
     @Override
     protected String configUsers() {
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String usersPasswdHashed = new String(hasher.hash(new SecureString("change_me".toCharArray())));
         return super.configUsers() +
-            "allowed_user:" + USERS_PASSWD_HASHED + "\n" +
-            "denied_user:" + USERS_PASSWD_HASHED + "\n" ;
+            "allowed_user:" + usersPasswdHashed + "\n" +
+            "denied_user:" + usersPasswdHashed + "\n" ;
     }
 
     @Override
