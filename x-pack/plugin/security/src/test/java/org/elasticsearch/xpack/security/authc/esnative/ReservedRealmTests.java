@@ -15,6 +15,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
@@ -125,7 +126,7 @@ public class ReservedRealmTests extends ESTestCase {
         final User expectedUser = randomReservedUser(enabled);
         final String principal = expectedUser.principal();
         final SecureString newPassword = new SecureString("foobar".toCharArray());
-        final Hasher hasher = HasherFactory.getHasher("bcrypt");
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
         when(securityIndex.indexExists()).thenReturn(true);
         doAnswer((i) -> {
             ActionListener callback = (ActionListener) i.getArguments()[1];
@@ -277,7 +278,7 @@ public class ReservedRealmTests extends ESTestCase {
     public void testFailedAuthentication() throws Exception {
         when(securityIndex.indexExists()).thenReturn(true);
         SecureString password = new SecureString("password".toCharArray());
-        final Hasher hasher = HasherFactory.getHasher("bcrypt");
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
         char[] hash = hasher.hash(password);
         ReservedUserInfo userInfo = new ReservedUserInfo(hash, true, false);
         mockGetAllReservedUserInfo(usersStore, Collections.singletonMap("elastic", userInfo));
@@ -337,7 +338,7 @@ public class ReservedRealmTests extends ESTestCase {
                 new AnonymousUser(Settings.EMPTY), securityIndex, threadPool);
         PlainActionFuture<AuthenticationResult> listener = new PlainActionFuture<>();
         SecureString password = new SecureString("password".toCharArray());
-        final Hasher hasher = HasherFactory.getHasher("bcrypt");
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
         doAnswer((i) -> {
             ActionListener callback = (ActionListener) i.getArguments()[1];
             char[] hash = hasher.hash(password);

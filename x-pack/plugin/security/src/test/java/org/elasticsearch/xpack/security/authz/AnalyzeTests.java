@@ -8,6 +8,7 @@ package org.elasticsearch.xpack.security.authz;
 import org.elasticsearch.action.admin.indices.analyze.AnalyzeAction;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.test.SecurityIntegTestCase;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
 import org.elasticsearch.xpack.core.security.authc.support.HasherFactory;
 
@@ -18,11 +19,11 @@ import static org.elasticsearch.xpack.core.security.authc.support.UsernamePasswo
 import static org.elasticsearch.xpack.core.security.authc.support.UsernamePasswordToken.basicAuthHeaderValue;
 
 public class AnalyzeTests extends SecurityIntegTestCase {
-    private static final Hasher hasher = HasherFactory.getHasher("bcrypt");
-    protected static final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("test123".toCharArray())));
-
+  
     @Override
     protected String configUsers() {
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
+        final String USERS_PASSWD_HASHED = new String(hasher.hash(new SecureString("test123".toCharArray())));
         return super.configUsers() +
                 "analyze_indices:" + USERS_PASSWD_HASHED + "\n" +
                 "analyze_cluster:" + USERS_PASSWD_HASHED + "\n";

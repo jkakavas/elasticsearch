@@ -58,7 +58,7 @@ public class SecuritySettingsSource extends ClusterDiscoveryConfiguration.Unicas
     public static final Settings DEFAULT_SETTINGS = Settings.EMPTY;
 
     public static final String TEST_USER_NAME = "test_user";
-    public static final String HASHING_ALGORITHM = randomFrom("pbkdf2", "bcrypt", "bcrypt6","bcrypt7","bcrypt8","bcrypt9","bcrypt10");
+    public static final String HASHING_ALGORITHM = randomFrom("pbkdf2", "bcrypt");
     private static final Hasher hasher = HasherFactory.getHasher(HASHING_ALGORITHM);
     public static final String TEST_PASSWORD_HASHED =
         new String(hasher.hash(new SecureString(SecuritySettingsSourceField.TEST_PASSWORD.toCharArray())));

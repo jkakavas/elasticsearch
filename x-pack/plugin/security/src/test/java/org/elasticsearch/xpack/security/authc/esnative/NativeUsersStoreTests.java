@@ -24,6 +24,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.SecuritySettingsSource;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
@@ -215,7 +216,7 @@ public class NativeUsersStoreTests extends ESTestCase {
     }
 
     private void respondToGetUserRequest(String username, SecureString password, String[] roles) throws IOException {
-        final Hasher hasher = HasherFactory.getHasher("bcrypt");
+        final Hasher hasher = HasherFactory.getHasher(SecuritySettingsSource.HASHING_ALGORITHM);
         final Map<String, Object> values = new HashMap<>();
         values.put(User.Fields.USERNAME.getPreferredName(), username);
         values.put(User.Fields.PASSWORD.getPreferredName(), String.valueOf(hasher.hash(password)));
