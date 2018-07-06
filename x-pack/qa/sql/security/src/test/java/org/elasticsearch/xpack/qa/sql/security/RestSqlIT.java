@@ -33,7 +33,7 @@ public class RestSqlIT extends RestSqlTestCase {
         if (SSL_ENABLED) {
             Path keyStore;
             try {
-                keyStore = PathUtils.get(RestSqlIT.class.getResource("/test-node.jks").toURI());
+                keyStore = PathUtils.get(RestSqlIT.class.getResource("/testnode.jks").toURI());
             } catch (URISyntaxException e) {
                 throw new RuntimeException("exception while reading the store", e);
             }
@@ -41,7 +41,7 @@ public class RestSqlIT extends RestSqlTestCase {
                 throw new IllegalStateException("Keystore file [" + keyStore + "] does not exist.");
             }
             builder.put(ESRestTestCase.TRUSTSTORE_PATH, keyStore)
-                .put(ESRestTestCase.TRUSTSTORE_PASSWORD, "keypass");
+                .put(ESRestTestCase.TRUSTSTORE_PASSWORD, "testnode");
         }
         return builder.build();
     }

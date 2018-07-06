@@ -31,7 +31,7 @@ public class CliSecurityIT extends SqlSecurityTestCase {
         if (RestSqlIT.SSL_ENABLED) {
             Path keyStore;
             try {
-                keyStore = PathUtils.get(RestSqlIT.class.getResource("/test-node.jks").toURI());
+                keyStore = PathUtils.get(RestSqlIT.class.getResource("/testnode.jks").toURI());
             } catch (URISyntaxException e) {
                 throw new RuntimeException("exception while reading the store", e);
             }
@@ -39,7 +39,7 @@ public class CliSecurityIT extends SqlSecurityTestCase {
                 throw new IllegalStateException("Keystore file [" + keyStore + "] does not exist.");
             }
             keystoreLocation = keyStore.toAbsolutePath().toString();
-            keystorePassword = "keypass";
+            keystorePassword = "testnode";
         } else {
             keystoreLocation = null;
             keystorePassword = null;

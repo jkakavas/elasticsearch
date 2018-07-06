@@ -66,7 +66,7 @@ public class JdbcSecurityIT extends SqlSecurityTestCase {
         }
         Path keyStore;
         try {
-            keyStore = PathUtils.get(RestSqlIT.class.getResource("/test-node.jks").toURI());
+            keyStore = PathUtils.get(RestSqlIT.class.getResource("/testnode.jks").toURI());
         } catch (URISyntaxException e) {
             throw new RuntimeException("exception while reading the store", e);
         }
@@ -77,9 +77,9 @@ public class JdbcSecurityIT extends SqlSecurityTestCase {
 
         properties.put("ssl", "true");
         properties.put("ssl.keystore.location", keyStoreStr);
-        properties.put("ssl.keystore.pass", "keypass");
+        properties.put("ssl.keystore.pass", "testnode");
         properties.put("ssl.truststore.location", keyStoreStr);
-        properties.put("ssl.truststore.pass", "keypass");
+        properties.put("ssl.truststore.pass", "testnode");
     }
 
     static void expectActionMatchesAdmin(CheckedFunction<Connection, ResultSet, SQLException> adminAction,
