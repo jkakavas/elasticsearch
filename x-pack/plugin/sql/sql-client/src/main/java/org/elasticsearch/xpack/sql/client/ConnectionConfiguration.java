@@ -85,7 +85,7 @@ public class ConnectionConfiguration {
         this.connectionString = connectionString;
         Properties settings = props != null ? props : new Properties();
 
-        checkPropertyNames(settings, optionNames());
+        validateSettings(settings, optionNames());
 
         connectTimeout = parseValue(CONNECT_TIMEOUT, settings.getProperty(CONNECT_TIMEOUT, CONNECT_TIMEOUT_DEFAULT), Long::parseLong);
         networkTimeout = parseValue(NETWORK_TIMEOUT, settings.getProperty(NETWORK_TIMEOUT, NETWORK_TIMEOUT_DEFAULT), Long::parseLong);
@@ -153,6 +153,27 @@ public class ConnectionConfiguration {
 
     protected Collection<? extends String> extraOptions() {
         return emptyList();
+    }
+
+    private static void validateSettings(Properties settings, Collection<String> knownNames) throws ClientException {
+        checkPropertyNames(settings, knownNames);
+        validateSslSettings(settings);
+    }
+
+    private static void validateSslSettings(Properties settings) {
+        if (settings.containsKey(SslConfig.SSL_KEYSTORE_LOCATION) &&
+            (settings.containsKey(SslConfig.SSL_KEY) || settings.containsKey(SslConfig.SSL_CERTIFICATE))) {
+            throw new ClientException("[ " + SslConfig.SSL_KEYSTORE_LOCATION + " ] parameter cannot be specified together with [ " +
+                SslConfig.SSL_KEY + " ] or [ " + SslConfig.SSL_CERTIFICATE + " ]");
+        }
+        if (settings.containsKey(SslConfig.SSL_KEY) && settings.containsKey(SslConfig.SSL_CERTIFICATE) == false) {
+            throw new ClientException("You must use[ " + SslConfig.SSL_CERTIFICATE + " ] to specify the certificate to be used with the " +
+                "key [ " + settings.getProperty(SslConfig.SSL_KEY) + " ]");
+        }
+        if (settings.containsKey(SslConfig.SSL_TRUSTSTORE_LOCATION) && settings.containsKey(SslConfig.SSL_CERTIFICATE_AUTHORITIES)) {
+            throw new ClientException("[ " + SslConfig.SSL_TRUSTSTORE_LOCATION + " ] parameter cannot be specified together with [ " +
+                SslConfig.SSL_CERTIFICATE_AUTHORITIES + " ]");
+        }
     }
 
     private static void checkPropertyNames(Properties settings, Collection<String> knownNames) throws ClientException {
