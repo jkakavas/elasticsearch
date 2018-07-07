@@ -33,6 +33,10 @@ import java.util.logging.LogManager;
 
 public class Cli extends LoggingAwareCommand {
     private final OptionSpec<String> keystoreLocation;
+    private final OptionSpec<String> truststoreLocation;
+    private final OptionSpec<String> keyLocation;
+    private final OptionSpec<String> certLocation;
+    private final OptionSpec<String> caLocations;
     private final OptionSpec<Boolean> checkOption;
     private final OptionSpec<String> connectionString;
 
@@ -78,6 +82,22 @@ public class Cli extends LoggingAwareCommand {
                     + "If specified then the CLI will prompt for a keystore password. "
                     + "If specified when the uri isn't https then an error is thrown.")
                 .withRequiredArg().ofType(String.class);
+        this.truststoreLocation = parser.acceptsAll(
+            Arrays.asList("k", "keystore_location"),
+            "Location of a keystore to use when setting up SSL. "
+                + "If specified then the CLI will prompt for a keystore password. "
+                + "If specified when the uri isn't https then an error is thrown.")
+            .withRequiredArg().ofType(String.class);
+        this.keyLocation = parser.accepts("key", "Location of a key file to use when setting up SSL. " +
+            "This key will be used for SSL client authentication. If specified then the CLI will prompt for the key password.")
+            .withRequiredArg().ofType(String.class);
+        this.certLocation = parser.accepts("certificate", "Location of a certificate file to use when" +
+            "setting up SSL. This certificate will be used for SSL client authentication.")
+            .withRequiredArg().ofType(String.class);
+        this.caLocations = parser.accepts("cacerts", "Location of certificate authorities file(s) to use when" +
+            "setting up SSL. These CA certificates will be used to validate the server certificate when an https uri is used." +
+            "Multiple comma separated locations can be used.")
+            .withRequiredArg().ofType(String.class);
         this.checkOption = parser.acceptsAll(Arrays.asList("c", "check"),
                 "Enable initial connection check on startup")
                 .withRequiredArg().ofType(Boolean.class)
@@ -94,15 +114,46 @@ public class Cli extends LoggingAwareCommand {
             throw new UserException(ExitCodes.USAGE, "expecting a single uri");
         }
         String uri = args.size() == 1 ? args.get(0) : null;
-        args = keystoreLocation.values(options);
-        if (args.size() > 1) {
+        List<String> keyStoreArgs = keystoreLocation.values(options);
+        List<String> trustStoreArgs = truststoreLocation.values(options);
+        List<String> keyArgs = keyLocation.values(options);
+        List<String> certArgs = certLocation.values(options);
+        List<String> caArgs = caLocations.values(options);
+        if (keyArgs.isEmpty() == false && keyStoreArgs.isEmpty() == false) {
+            throw new UserException(ExitCodes.USAGE, "keystores can't be used at the same time as keys");
+        }
+        if (keyArgs.isEmpty() == false && certArgs.isEmpty()) {
+            throw new UserException(ExitCodes.USAGE, "certificate must be specified when key is used");
+        }
+        if (caArgs.isEmpty() == false && trustStoreArgs.isEmpty() == false) {
+            throw new UserException(ExitCodes.USAGE, "truststore can't be used at the same time as ca certificates");
+        }
+        if (keyStoreArgs.size() > 1) {
             throw new UserException(ExitCodes.USAGE, "expecting a single keystore file");
         }
-        String keystoreLocationValue = args.size() == 1 ? args.get(0) : null;
-        execute(uri, debug, keystoreLocationValue, checkConnection);
+        if (trustStoreArgs.size() > 1) {
+            throw new UserException(ExitCodes.USAGE, "expecting a single truststore file");
+        }
+        if (keyArgs.size() > 1) {
+            throw new UserException(ExitCodes.USAGE, "expecting a single key file");
+        }
+        if (certArgs.size() > 1) {
+            throw new UserException(ExitCodes.USAGE, "expecting a single certificate file");
+        }
+        if (caArgs.size() > 1) {
+            throw new UserException(ExitCodes.USAGE, "please specify multiple ca certificates as a comma separated string");
+        }
+        String keystoreLocationValue = keyStoreArgs.size() == 1 ? keyStoreArgs.get(0) : null;
+        String truststoreLocationValue = trustStoreArgs.size() == 1 ? trustStoreArgs.get(0) : null;
+        String keyLocationValue = keyArgs.size() == 1 ? keyArgs.get(0) : null;
+        String certLocationValue = certArgs.size() == 1 ? certArgs.get(0) : null;
+        String caLocationValue = caArgs.size() == 1 ? caArgs.get(0) : null;
+        execute(uri, debug, keystoreLocationValue, truststoreLocationValue, keyLocationValue, certLocationValue, caLocationValue,
+            checkConnection);
     }
 
-    private void execute(String uri, boolean debug, String keystoreLocation, boolean checkConnection) throws Exception {
+    private void execute(String uri, boolean debug, String keystoreLocation, String truststoreLocation, String keyLocationValue,
+                         String certLocationValue, String caLocationValue, boolean checkConnection) throws Exception {
         CliCommand cliCommand = new CliCommands(
                 new PrintLogoCommand(),
                 new ClearScreenCliCommand(),
@@ -113,7 +164,9 @@ public class Cli extends LoggingAwareCommand {
         );
         try {
             ConnectionBuilder connectionBuilder = new ConnectionBuilder(cliTerminal);
-            ConnectionConfiguration con = connectionBuilder.buildConnection(uri, keystoreLocation);
+            //
+            ConnectionConfiguration con = connectionBuilder.buildConnection(uri, keystoreLocation, truststoreLocation, keyLocationValue,
+                certLocationValue, caLocationValue);
             CliSession cliSession = new CliSession(new HttpClient(con));
             cliSession.setDebug(debug);
             if (checkConnection) {

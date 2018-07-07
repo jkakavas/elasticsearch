@@ -9,6 +9,7 @@ import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.SuppressForbidden;
 import org.elasticsearch.cli.UserException;
 import org.elasticsearch.xpack.sql.client.ConnectionConfiguration;
+import org.elasticsearch.xpack.sql.client.SslConfig;
 
 import java.net.URI;
 import java.nio.file.Files;
@@ -39,7 +40,8 @@ public class ConnectionBuilder {
      * @param keystoreLocation    the location of the keystore to configure. If null then use the system keystore.
      * @throws UserException if there is a problem with the information provided by the user
      */
-    public ConnectionConfiguration buildConnection(String connectionStringArg, String keystoreLocation) throws UserException {
+    public ConnectionConfiguration buildConnection(String connectionStringArg, String keystoreLocation, String truststoreLocation,
+                                                   String keyLocation, String certLocation, String caLocation) throws UserException {
         final URI uri;
         final String connectionString;
         Properties properties = new Properties();
@@ -65,19 +67,38 @@ public class ConnectionBuilder {
             if (false == "https".equals(uri.getScheme())) {
                 throw new UserException(ExitCodes.USAGE, "keystore file specified without https");
             }
-            Path p = getKeystorePath(keystoreLocation);
+            Path p = getFilePath(keystoreLocation);
             checkIfExists("keystore file", p);
             String keystorePassword = cliTerminal.readPassword("keystore password: ");
 
-            /*
-             * Set both the keystore and truststore settings which is required
-             * to everything work smoothly. I'm not totally sure why we have
-             * two settings but that is a problem for another day.
-             */
-            properties.put("ssl.keystore.location", keystoreLocation);
-            properties.put("ssl.keystore.pass", keystorePassword);
-            properties.put("ssl.truststore.location", keystoreLocation);
-            properties.put("ssl.truststore.pass", keystorePassword);
+            properties.put(SslConfig.SSL_KEYSTORE_LOCATION, keystoreLocation);
+            properties.put(SslConfig.SSL_KEYSTORE_PASS, keystorePassword);
+            if (truststoreLocation != null) {
+                String truststorePassword = cliTerminal.readPassword("keystore password: ");
+                properties.put(SslConfig.SSL_TRUSTSTORE_LOCATION, truststoreLocation);
+                properties.put(SslConfig.SSL_TRUSTSTORE_PASS, truststorePassword);
+            } else {
+                // If truststore is not explicitly configured, use the keystore as truststore as well.
+                properties.put(SslConfig.SSL_TRUSTSTORE_LOCATION, keystoreLocation);
+                properties.put(SslConfig.SSL_TRUSTSTORE_PASS, keystorePassword);
+            }
+        } else if (keyLocation != null) {
+            if (false == "https".equals(uri.getScheme())) {
+                throw new UserException(ExitCodes.USAGE, "key file specified without https");
+            }
+            Path keyPath = getFilePath(keyLocation);
+            checkIfExists("key file", keyPath);
+            Path certPath = getFilePath(certLocation);
+            checkIfExists("key file", certPath);
+            properties.put(SslConfig.SSL_KEY, keyLocation);
+            properties.put(SslConfig.SSL_CERTIFICATE, certLocation);
+            if (caLocation != null) {
+                properties.put(SslConfig.SSL_CERTIFICATE_AUTHORITIES, caLocation);
+            } else if (truststoreLocation != null) {
+                String truststorePassword = cliTerminal.readPassword("keystore password: ");
+                properties.put(SslConfig.SSL_TRUSTSTORE_LOCATION, truststoreLocation);
+                properties.put(SslConfig.SSL_TRUSTSTORE_PASS, truststorePassword);
+            }
         }
 
         if ("https".equals(uri.getScheme())) {
@@ -96,8 +117,8 @@ public class ConnectionBuilder {
     }
 
     @SuppressForbidden(reason = "cli application shouldn't depend on ES")
-    private Path getKeystorePath(String keystoreLocation) {
-        return Paths.get(keystoreLocation);
+    private Path getFilePath(String location) {
+        return Paths.get(location);
     }
 
     protected ConnectionConfiguration newConnectionConfiguration(URI uri, String connectionString, Properties properties) {
