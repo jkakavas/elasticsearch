@@ -5,7 +5,6 @@
  */
 package org.elasticsearch.xpack.sql.client;
 
-import org.elasticsearch.xpack.core.ssl.CertParsingUtils;
 import org.elasticsearch.xpack.core.ssl.PemUtils;
 
 import java.io.IOException;
@@ -16,8 +15,11 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -140,9 +142,14 @@ public class SslConfig {
                 throw new ClientException(
                     "Expected to find key file at [" + keyPath + "] but was unable to. Make sure you have specified a valid URI.");
             }
-            KeyManager km = CertParsingUtils.keyManager(CertParsingUtils.readCertificates(Collections.singletonList(certPath)),
-                PemUtils.readPrivateKey(keyPath, keyPassword::toCharArray), keyPass.toCharArray());
-            return new KeyManager[]{km};
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            Certificate cert = certFactory.generateCertificate(Files.newInputStream(getFilePath(certificateLocation)));
+            KeyManagerFactory kmFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            keyStore.load(null, null);
+            keyStore.setKeyEntry("key", PemUtils.readPrivateKey(keyPath, keyPassword::toCharArray), keyPassword.toCharArray(), cert);
+            kmFactory.init(keyStore, keyPassword.toCharArray());
+            return kmFactory.getKeyManagers();
         }
         return null;
     }
@@ -185,11 +192,32 @@ public class SslConfig {
                 throw new ClientException("None of the specified certificate authorities certificates could be found. Make sure you have " +
                     "specified valid URIs");
             }
-            TrustManager tm = CertParsingUtils.trustManager(CertParsingUtils.readCertificates(trustedCerts));
-            return new TrustManager[]{tm};
+            Collection<Certificate> certificates = new ArrayList<>();
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            for (String certLocation : certificateAuthorities) {
+                try (InputStream input = Files.newInputStream(getFilePath(certLocation))) {
+                    certificates.addAll((Collection<Certificate>) certFactory.generateCertificates(input));
+                }
+            }
+            KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            trustStore.load(null, null);
+            int counter = 0;
+            for (Certificate cert : certificates) {
+                trustStore.setCertificateEntry("cert" + counter, cert);
+                counter++;
+            }
+            TrustManagerFactory tmFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmFactory.init(trustStore);
+            return tmFactory.getTrustManagers();
         }
         return null;
     }
+
+    @SuppressForbidden(reason = "cli application shouldn't depend on ES")
+    private Path getFilePath(String location) {
+        return Paths.get(location);
+    }
+
 
     @Override
     public boolean equals(Object obj) {
