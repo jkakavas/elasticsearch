@@ -23,12 +23,22 @@ import org.apache.lucene.util.LuceneTestCase;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.hamcrest.Matchers.contains;
@@ -379,6 +389,44 @@ public class FileWatcherTests extends ESTestCase {
         fileWatcher.checkAndNotify();
         assertThat(changes.notifications(), contains(
                 equalTo("onFileCreated: testfile.txt")
+        ));
+    }
+
+    public void testSameSizeFiles() throws Exception {
+        Path tempDir = createTempDir();
+        Path testFile = tempDir.resolve("testfile.txt");
+        Path testFile2 =  tempDir.resolve("testfile2.txt");
+        try (OutputStream out = Files.newOutputStream(testFile)) {
+            byte[] bytes = new byte[1024];
+            new SecureRandom().nextBytes(bytes);
+            out.write(bytes);
+        }
+        try (OutputStream out = Files.newOutputStream(testFile2)) {
+            byte[] bytes = new byte[1024];
+            new SecureRandom().nextBytes(bytes);
+            out.write(bytes);
+        }
+        RecordingChangeListener changes = new RecordingChangeListener(tempDir);
+        FileWatcher fileWatcher = new FileWatcher(testFile);
+        fileWatcher.addListener(changes);
+        fileWatcher.init();
+        BasicFileAttributes bfa1 = Files.readAttributes(testFile, BasicFileAttributes.class);
+        BasicFileAttributes bfa2 = Files.readAttributes(testFile2, BasicFileAttributes.class);
+        long s1 = bfa1.size();
+        long t1 = bfa1.lastModifiedTime().toMillis();
+        long s2 = bfa2.size();
+        long t2 = bfa2.lastModifiedTime().toMillis();
+        assertEquals("Files should have the same size", s1, s2);
+        try {
+            Files.move(testFile2, testFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(testFile2, testFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+        fileWatcher.checkAndNotify();
+        System.out.println(changes.notifications);
+        assertThat(changes.notifications(), contains(
+            equalTo("onFileInit: testfile.txt"),
+            equalTo("onFileChanged: testfile.txt")
         ));
     }
 
