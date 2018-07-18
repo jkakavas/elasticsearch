@@ -1,0 +1,21 @@
+evaluationDependsOn(xpackModule('core'))
+
+apply plugin: 'elasticsearch.esplugin'
+esplugin {
+    name 'x-pack-clitools'
+    description 'Elasticsearch Expanded Pack Plugin - Security'
+    classname 'org.elasticsearch.xpack.security.Security'
+    requiresKeystore true
+    extendedPlugins = ['x-pack-core']
+}
+
+archivesBaseName = 'x-pack-clitools'
+
+dependencies {
+    compileOnly "org.elasticsearch:elasticsearch:${version}"
+
+    testCompile 'com.google.jimfs:jimfs:1.1'
+
+    compile 'org.bouncycastle:bcprov-jdk15on:1.59'
+    compile 'org.bouncycastle:bcpkix-jdk15on:1.59'
+}

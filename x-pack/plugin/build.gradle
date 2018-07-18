@@ -196,4 +196,14 @@ integTestCluster {
 if (integTestCluster.distribution.startsWith("oss-")) {
   integTest.enabled = false
 }
+version 'unspecified'
 
+sourceCompatibility = 1.8
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  testCompile group: 'junit', name: 'junit', version: '4.12'
+}
