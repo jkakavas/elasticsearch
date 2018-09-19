@@ -23,6 +23,7 @@ import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
@@ -46,6 +47,7 @@ class StoreKeyConfig extends KeyConfig {
     final String keyStoreAlgorithm;
     final SecureString keyPassword;
     final String trustStoreAlgorithm;
+    final String keyStoreProvider;
 
     /**
      * Creates a new configuration that can be used to load key and trust material from a {@link KeyStore}
@@ -66,6 +68,28 @@ class StoreKeyConfig extends KeyConfig {
         this.keyPassword = Objects.requireNonNull(keyPassword).clone();
         this.keyStoreAlgorithm = keyStoreAlgorithm;
         this.trustStoreAlgorithm = trustStoreAlgorithm;
+        this.keyStoreProvider = null;
+    }
+
+    /**
+     * Creates a new configuration that can be used to load key and trust material from a PKCS11 token
+     *
+     * @param keyStoreProvider    the name of the Security Provider to use
+     * @param keyStorePassword    the password for the keystore
+     * @param keyPassword         the password for the private key in the keystore
+     * @param keyStoreAlgorithm   the algorithm for the keystore
+     * @param trustStoreAlgorithm the algorithm to use when loading as a truststore
+     */
+    StoreKeyConfig(String keyStoreProvider, SecureString keyStorePassword, SecureString keyPassword, String keyStoreAlgorithm,
+                   String trustStoreAlgorithm) {
+        this.keyStorePath = null;
+        this.keyStoreProvider = Objects.requireNonNull(keyStoreProvider, "keystore provider must be specified");
+        this.keyStorePassword = Objects.requireNonNull(keyStorePassword, "keystore password must be specified");
+        this.keyStoreType = "pkcs11";
+        this.keyStoreAlgorithm = keyStoreAlgorithm;
+        this.keyPassword = keyPassword;
+        this.trustStoreAlgorithm = trustStoreAlgorithm;
+
     }
 
     @Override
@@ -74,7 +98,8 @@ class StoreKeyConfig extends KeyConfig {
             KeyStore ks = getKeyStore(environment);
             checkKeyStore(ks);
             return CertParsingUtils.keyManager(ks, keyPassword.getChars(), keyStoreAlgorithm);
-        } catch (IOException | CertificateException | NoSuchAlgorithmException | UnrecoverableKeyException | KeyStoreException e) {
+        } catch (IOException | CertificateException | NoSuchAlgorithmException | UnrecoverableKeyException | KeyStoreException |
+            NoSuchProviderException e) {
             throw new ElasticsearchException("failed to initialize a KeyManagerFactory", e);
         }
     }
@@ -82,8 +107,9 @@ class StoreKeyConfig extends KeyConfig {
     @Override
     X509ExtendedTrustManager createTrustManager(@Nullable Environment environment) {
         try {
-            return CertParsingUtils.trustManager(keyStorePath, keyStoreType, keyStorePassword.getChars(), trustStoreAlgorithm, environment);
-        } catch (Exception e) {
+            KeyStore ks = getKeyStore(environment);
+            return CertParsingUtils.trustManager(ks, trustStoreAlgorithm);
+        } catch (IOException | CertificateException | NoSuchAlgorithmException | KeyStoreException | NoSuchProviderException e) {
             throw new ElasticsearchException("failed to initialize a TrustManagerFactory", e);
         }
     }
@@ -112,7 +138,8 @@ class StoreKeyConfig extends KeyConfig {
 
     @Override
     List<Path> filesToMonitor(@Nullable Environment environment) {
-        return Collections.singletonList(CertParsingUtils.resolvePath(keyStorePath, environment));
+        return null != keyStorePath ?
+            Collections.singletonList(CertParsingUtils.resolvePath(keyStorePath, environment)) : Collections.emptyList();
     }
 
     @Override
@@ -136,12 +163,19 @@ class StoreKeyConfig extends KeyConfig {
     }
 
     private KeyStore getKeyStore(@Nullable Environment environment)
-                                throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException {
-        try (InputStream in = Files.newInputStream(CertParsingUtils.resolvePath(keyStorePath, environment))) {
-            KeyStore ks = KeyStore.getInstance(keyStoreType);
-            ks.load(in, keyStorePassword.getChars());
+        throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, NoSuchProviderException {
+        if (null != keyStorePath) {
+            try (InputStream in = Files.newInputStream(CertParsingUtils.resolvePath(keyStorePath, environment))) {
+                KeyStore ks = KeyStore.getInstance(keyStoreType);
+                ks.load(in, keyStorePassword.getChars());
+                return ks;
+            }
+        } else if (null != keyStoreProvider) {
+            KeyStore ks = KeyStore.getInstance(keyStoreType, keyStoreProvider);
+            ks.load(null, keyStorePassword.getChars());
             return ks;
         }
+        throw new IllegalArgumentException("keyStorePath and keyStoreProvider cannot both be null");
     }
 
     private void checkKeyStore(KeyStore keyStore) throws KeyStoreException {

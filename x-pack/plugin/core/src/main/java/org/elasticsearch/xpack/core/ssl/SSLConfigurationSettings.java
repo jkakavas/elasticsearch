@@ -39,6 +39,7 @@ public class SSLConfigurationSettings {
     public final Setting<SecureString> truststorePassword;
     public final Setting<String> truststoreAlgorithm;
     public final Setting<Optional<String>> truststoreType;
+    public final Setting<Optional<String>> truststoreProvider;
     public final Setting<Optional<String>> trustRestrictionsPath;
     public final Setting<List<String>> caPaths;
     public final Setting<Optional<SSLClientAuth>> clientAuth;
@@ -55,6 +56,7 @@ public class SSLConfigurationSettings {
      */
     private static final String DEFAULT_KEYSTORE_TYPE = "jks";
     private static final String PKCS12_KEYSTORE_TYPE = "PKCS12";
+    private static final String PKCS11_KEYSTORE_TYPE = "PKCS11";
 
     private static final Function<String, Setting<List<String>>> CIPHERS_SETTING_TEMPLATE = key -> Setting.listSetting(key, Collections
             .emptyList(), Function.identity(), Property.NodeScope, Property.Filtered);
@@ -68,6 +70,9 @@ public class SSLConfigurationSettings {
 
     public static final Setting<Optional<String>> KEYSTORE_PATH_PROFILES = Setting.affixKeySetting("transport.profiles.",
             "xpack.security.ssl.keystore.path", X509KeyPairSettings.KEYSTORE_PATH_TEMPLATE);
+
+    public static final Setting<Optional<String>> KEYSTORE_PROVIDER_PROFILES = Setting.affixKeySetting("transport.profiles.",
+        "xpack.security.ssl.keystore.provider", X509KeyPairSettings.KEYSTORE_PROVIDER_TEMPLATE);
 
     public static final Setting<SecureString> LEGACY_KEYSTORE_PASSWORD_PROFILES = Setting.affixKeySetting("transport.profiles.",
             "xpack.security.ssl.keystore.password", X509KeyPairSettings.LEGACY_KEYSTORE_PASSWORD_TEMPLATE);
@@ -85,6 +90,11 @@ public class SSLConfigurationSettings {
             Optional::ofNullable, Property.NodeScope, Property.Filtered);
     public static final Setting<Optional<String>> TRUST_STORE_PATH_PROFILES = Setting.affixKeySetting("transport.profiles.",
             "xpack.security.ssl.truststore.path", TRUST_STORE_PATH_TEMPLATE);
+
+    private static final Function<String, Setting<Optional<String>>> TRUST_STORE_PROVIDER_TEMPLATE = key -> new Setting<>(key, s -> null,
+        Optional::ofNullable, Property.NodeScope, Property.Filtered);
+    public static final Setting<Optional<String>> TRUST_STORE_PROVIDER_PROFILES = Setting.affixKeySetting("transport.profiles.",
+        "xpack.security.ssl.truststore.provider", TRUST_STORE_PROVIDER_TEMPLATE);
 
     public static final Setting<Optional<String>> KEY_PATH_PROFILES = Setting.affixKeySetting("transport.profiles.",
             "xpack.security.ssl.key", X509KeyPairSettings.KEY_PATH_TEMPLATE);
@@ -165,14 +175,15 @@ public class SSLConfigurationSettings {
         truststorePassword = TRUSTSTORE_PASSWORD_TEMPLATE.apply(prefix + "truststore.secure_password");
         truststoreAlgorithm = TRUST_STORE_ALGORITHM_TEMPLATE.apply(prefix + "truststore.algorithm");
         truststoreType = TRUST_STORE_TYPE_TEMPLATE.apply(prefix + "truststore.type");
+        truststoreProvider = TRUST_STORE_PROVIDER_TEMPLATE.apply(prefix + "truststore.provider");
         trustRestrictionsPath = TRUST_RESTRICTIONS_TEMPLATE.apply(prefix + "trust_restrictions.path");
         caPaths = CAPATH_SETTING_TEMPLATE.apply(prefix + "certificate_authorities");
         clientAuth = CLIENT_AUTH_SETTING_TEMPLATE.apply(prefix + "client_authentication");
         verificationMode = VERIFICATION_MODE_SETTING_TEMPLATE.apply(prefix + "verification_mode");
 
         final List<Setting<? extends Object>> settings = CollectionUtils.arrayAsArrayList(ciphers, supportedProtocols,
-                truststorePath, truststorePassword, truststoreAlgorithm, truststoreType, trustRestrictionsPath,
-                caPaths, clientAuth, verificationMode, legacyTruststorePassword);
+            truststorePath, truststorePassword, truststoreAlgorithm, truststoreType, truststoreProvider, trustRestrictionsPath,
+            caPaths, clientAuth, verificationMode, legacyTruststorePassword);
         settings.addAll(x509KeyPair.getAllSettings());
         this.allSettings = Collections.unmodifiableList(settings);
     }
@@ -182,7 +193,10 @@ public class SSLConfigurationSettings {
     }
 
     private static String inferKeyStoreType(String path) {
-        String name = path == null ? "" : path.toLowerCase(Locale.ROOT);
+        if (null == path) {
+            return PKCS11_KEYSTORE_TYPE;
+        }
+        String name = path.toLowerCase(Locale.ROOT);
         if (name.endsWith(".p12") || name.endsWith(".pfx") || name.endsWith(".pkcs12")) {
             return PKCS12_KEYSTORE_TYPE;
         } else {
@@ -215,12 +229,12 @@ public class SSLConfigurationSettings {
 
     public static Collection<Setting<?>> getProfileSettings() {
         return Arrays.asList(CIPHERS_SETTING_PROFILES, SUPPORTED_PROTOCOLS_PROFILES, KEYSTORE_PATH_PROFILES,
-                LEGACY_KEYSTORE_PASSWORD_PROFILES, KEYSTORE_PASSWORD_PROFILES, LEGACY_KEYSTORE_KEY_PASSWORD_PROFILES,
-                KEYSTORE_KEY_PASSWORD_PROFILES, TRUST_STORE_PATH_PROFILES, LEGACY_TRUSTSTORE_PASSWORD_PROFILES,
-                TRUSTSTORE_PASSWORD_PROFILES, KEY_STORE_ALGORITHM_PROFILES, TRUST_STORE_ALGORITHM_PROFILES,
-                KEY_STORE_TYPE_PROFILES, TRUST_STORE_TYPE_PROFILES, TRUST_RESTRICTIONS_PROFILES,
-                KEY_PATH_PROFILES, LEGACY_KEY_PASSWORD_PROFILES, KEY_PASSWORD_PROFILES,CERT_PROFILES,CAPATH_SETTING_PROFILES,
-                CLIENT_AUTH_SETTING_PROFILES, VERIFICATION_MODE_SETTING_PROFILES);
+            LEGACY_KEYSTORE_PASSWORD_PROFILES, KEYSTORE_PASSWORD_PROFILES, LEGACY_KEYSTORE_KEY_PASSWORD_PROFILES,
+            KEYSTORE_KEY_PASSWORD_PROFILES, TRUST_STORE_PATH_PROFILES, LEGACY_TRUSTSTORE_PASSWORD_PROFILES,
+            TRUSTSTORE_PASSWORD_PROFILES, KEY_STORE_ALGORITHM_PROFILES, TRUST_STORE_ALGORITHM_PROFILES,
+            KEY_STORE_TYPE_PROFILES, TRUST_STORE_TYPE_PROFILES, KEYSTORE_PROVIDER_PROFILES, TRUST_STORE_PROVIDER_PROFILES,
+            TRUST_RESTRICTIONS_PROFILES, KEY_PATH_PROFILES, LEGACY_KEY_PASSWORD_PROFILES, KEY_PASSWORD_PROFILES, CERT_PROFILES,
+            CAPATH_SETTING_PROFILES, CLIENT_AUTH_SETTING_PROFILES, VERIFICATION_MODE_SETTING_PROFILES);
     }
 
     public List<Setting<SecureString>> getSecureSettingsInUse(Settings settings) {

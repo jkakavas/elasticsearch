@@ -14,10 +14,17 @@ import org.elasticsearch.xpack.core.ssl.cert.CertificateInfo;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,6 +40,7 @@ class StoreTrustConfig extends TrustConfig {
 
     final String trustStorePath;
     final String trustStoreType;
+    final String trustStoreProvider;
     final SecureString trustStorePassword;
     final String trustStoreAlgorithm;
 
@@ -43,21 +51,23 @@ class StoreTrustConfig extends TrustConfig {
      * @param trustStorePassword  the password for the truststore
      * @param trustStoreAlgorithm the algorithm to use for reading the truststore
      */
-    StoreTrustConfig(String trustStorePath, String trustStoreType, SecureString trustStorePassword, String trustStoreAlgorithm) {
+    StoreTrustConfig(String trustStorePath, String trustStoreType, SecureString trustStorePassword, String trustStoreAlgorithm,
+                     String trustStoreProvider) {
         this.trustStorePath = trustStorePath;
         this.trustStoreType = trustStoreType;
         // since we support reloading the truststore, we must store the passphrase in memory for the life of the node, so we
         // clone the password and never close it during our uses below
         this.trustStorePassword = Objects.requireNonNull(trustStorePassword, "truststore password must be specified").clone();
         this.trustStoreAlgorithm = trustStoreAlgorithm;
+        this.trustStoreProvider = trustStoreProvider;
     }
 
     @Override
     X509ExtendedTrustManager createTrustManager(@Nullable Environment environment) {
         try {
-            return CertParsingUtils.trustManager(trustStorePath, trustStoreType, trustStorePassword.getChars(),
-                    trustStoreAlgorithm, environment);
-        } catch (Exception e) {
+            KeyStore trustStore = getTrustStore(environment);
+            return CertParsingUtils.trustManager(trustStore, trustStoreAlgorithm);
+        } catch (IOException | CertificateException | NoSuchAlgorithmException | KeyStoreException | NoSuchProviderException e) {
             throw new ElasticsearchException("failed to initialize a TrustManagerFactory", e);
         }
     }
@@ -113,5 +123,21 @@ class StoreTrustConfig extends TrustConfig {
         return "trustStorePath=[" + trustStorePath +
                 "], trustStoreAlgorithm=[" + trustStoreAlgorithm +
                 "]";
+    }
+
+    private KeyStore getTrustStore(@Nullable Environment environment)
+        throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, NoSuchProviderException {
+        if (null != trustStorePath) {
+            try (InputStream in = Files.newInputStream(CertParsingUtils.resolvePath(trustStorePath, environment))) {
+                KeyStore ks = KeyStore.getInstance(trustStoreType);
+                ks.load(in, trustStorePassword.getChars());
+                return ks;
+            }
+        } else if (null != trustStoreProvider) {
+            KeyStore ks = KeyStore.getInstance(trustStoreType, trustStoreProvider);
+            ks.load(null, trustStorePassword.getChars());
+            return ks;
+        }
+        throw new IllegalArgumentException("trustStorePath and trustStoreProvider cannot both be null");
     }
 }

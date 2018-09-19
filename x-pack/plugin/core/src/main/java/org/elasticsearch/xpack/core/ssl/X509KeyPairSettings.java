@@ -30,6 +30,9 @@ public class X509KeyPairSettings {
     static final Function<String, Setting<Optional<String>>> KEYSTORE_PATH_TEMPLATE = key -> new Setting<>(key, s -> null,
             Optional::ofNullable, Setting.Property.NodeScope, Setting.Property.Filtered);
 
+    static final Function<String, Setting<Optional<String>>> KEYSTORE_PROVIDER_TEMPLATE = key -> new Setting<>(key, s -> null,
+        Optional::ofNullable, Setting.Property.NodeScope, Setting.Property.Filtered);
+
     static final Function<String, Setting<SecureString>> LEGACY_KEYSTORE_PASSWORD_TEMPLATE = key -> new Setting<>(key, "",
             SecureString::new, Setting.Property.Deprecated, Setting.Property.Filtered, Setting.Property.NodeScope);
     static final Function<String, Setting<SecureString>> KEYSTORE_PASSWORD_TEMPLATE = key -> SecureSetting.secureString(key,
@@ -69,6 +72,7 @@ public class X509KeyPairSettings {
     final Setting<String> keystoreAlgorithm;
     final Setting<Optional<String>> keystoreType;
     final Setting<SecureString> keystoreKeyPassword;
+    final Setting<Optional<String>> keystoreProvider;
 
     // Specify private cert/key pair via key and certificate files
     final Setting<Optional<String>> keyPath;
@@ -89,6 +93,7 @@ public class X509KeyPairSettings {
         keystoreAlgorithm = KEY_STORE_ALGORITHM_TEMPLATE.apply(prefix + "keystore.algorithm");
         keystoreType = KEY_STORE_TYPE_TEMPLATE.apply(prefix + "keystore.type");
         keystoreKeyPassword = KEYSTORE_KEY_PASSWORD_TEMPLATE.apply(prefix + "keystore.secure_key_password");
+        keystoreProvider = KEYSTORE_PROVIDER_TEMPLATE.apply(prefix + "keystore.provider");
 
         keyPath = KEY_PATH_TEMPLATE.apply(prefix + "key");
         keyPassword = KEY_PASSWORD_TEMPLATE.apply(prefix + "secure_key_passphrase");
@@ -100,7 +105,7 @@ public class X509KeyPairSettings {
         this.prefix = prefix;
 
         final List<Setting<?>> settings = CollectionUtils.arrayAsArrayList(
-                keystorePath, keystorePassword, keystoreAlgorithm, keystoreType, keystoreKeyPassword,
+            keystorePath, keystorePassword, keystoreAlgorithm, keystoreType, keystoreKeyPassword, keystoreProvider,
                 keyPath, keyPassword, certificatePath);
         if (acceptNonSecurePasswords) {
             settings.add(legacyKeystorePassword);

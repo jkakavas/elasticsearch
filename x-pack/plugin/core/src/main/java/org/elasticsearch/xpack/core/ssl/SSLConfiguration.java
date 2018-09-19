@@ -212,7 +212,8 @@ public final class SSLConfiguration {
 
     private static TrustConfig createCertChainTrustConfig(Settings settings, KeyConfig keyConfig, SSLConfiguration global) {
         String trustStorePath = SETTINGS_PARSER.truststorePath.get(settings).orElse(null);
-
+        String trustStoreProvider = SETTINGS_PARSER.truststoreProvider.get(settings).orElse(null);
+        Boolean merge = false;
         List<String> caPaths = getListOrNull(SETTINGS_PARSER.caPaths, settings);
         if (trustStorePath != null && caPaths != null) {
             throw new IllegalArgumentException("you cannot specify a truststore and ca files");
@@ -232,16 +233,21 @@ public final class SSLConfiguration {
             SecureString trustStorePassword = SETTINGS_PARSER.truststorePassword.get(settings);
             String trustStoreAlgorithm = SETTINGS_PARSER.truststoreAlgorithm.get(settings);
             String trustStoreType = getKeyStoreType(SETTINGS_PARSER.truststoreType, settings, trustStorePath);
-            return new StoreTrustConfig(trustStorePath, trustStoreType, trustStorePassword, trustStoreAlgorithm);
+            return new StoreTrustConfig(trustStorePath, trustStoreType, trustStorePassword, trustStoreAlgorithm, null);
+        } else if (null != trustStoreProvider) {
+            SecureString trustStorePassword = SETTINGS_PARSER.truststorePassword.get(settings);
+            String trustStoreAlgorithm = SETTINGS_PARSER.truststoreAlgorithm.get(settings);
+            String trustStoreType = getKeyStoreType(SETTINGS_PARSER.truststoreType, settings, trustStorePath);
+            return new StoreTrustConfig(null, trustStoreType, trustStorePassword, trustStoreAlgorithm, trustStoreProvider);
         } else if (global == null && System.getProperty("javax.net.ssl.trustStore") != null
             && System.getProperty("javax.net.ssl.trustStore").equals("NONE") == false) {
             try (SecureString truststorePassword = new SecureString(System.getProperty("javax.net.ssl.trustStorePassword", ""))) {
                 return new StoreTrustConfig(System.getProperty("javax.net.ssl.trustStore"), KeyStore.getDefaultType(), truststorePassword,
-                        System.getProperty("ssl.TrustManagerFactory.algorithm", TrustManagerFactory.getDefaultAlgorithm()));
+                    System.getProperty("ssl.TrustManagerFactory.algorithm", TrustManagerFactory.getDefaultAlgorithm()), null);
             }
         } else if (global != null && keyConfig == global.keyConfig()) {
             return global.trustConfig();
-        } else if (keyConfig != KeyConfig.NONE) {
+        } else if (keyConfig != KeyConfig.NONE && merge != false) {
             return DefaultJDKTrustConfig.merge(keyConfig);
         } else {
             return DefaultJDKTrustConfig.INSTANCE;

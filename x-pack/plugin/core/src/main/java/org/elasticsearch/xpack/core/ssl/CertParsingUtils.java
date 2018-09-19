@@ -151,7 +151,7 @@ public class CertParsingUtils {
      * Returns a {@link X509ExtendedKeyManager} that is built from the provided private key and certificate chain
      */
     public static X509ExtendedKeyManager keyManager(Certificate[] certificateChain, PrivateKey privateKey, char[] password)
-            throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException, IOException, CertificateException {
+        throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException, IOException, CertificateException {
         KeyStore keyStore = getKeyStore(certificateChain, privateKey, password);
         return keyManager(keyStore, password, KeyManagerFactory.getDefaultAlgorithm());
     }
@@ -169,7 +169,7 @@ public class CertParsingUtils {
      * Returns a {@link X509ExtendedKeyManager} that is built from the provided keystore
      */
     public static X509ExtendedKeyManager keyManager(KeyStore keyStore, char[] password, String algorithm)
-            throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException {
+        throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException {
         KeyManagerFactory kmf = KeyManagerFactory.getInstance(algorithm);
         kmf.init(keyStore, password);
         KeyManager[] keyManagers = kmf.getKeyManagers();
@@ -197,9 +197,13 @@ public class CertParsingUtils {
     static KeyConfig createKeyConfig(X509KeyPairSettings keyPair, Settings settings, String trustStoreAlgorithm) {
         String keyPath = keyPair.keyPath.get(settings).orElse(null);
         String keyStorePath = keyPair.keystorePath.get(settings).orElse(null);
+        String keyStoreProvider = keyPair.keystoreProvider.get(settings).orElse(null);
 
         if (keyPath != null && keyStorePath != null) {
             throw new IllegalArgumentException("you cannot specify a keystore and key file");
+        }
+        if (keyStorePath != null && keyStoreProvider != null) {
+            throw new IllegalArgumentException("you cannot specify a keystore file and a PKCS11 provider");
         }
 
         if (keyPath != null) {
@@ -222,6 +226,16 @@ public class CertParsingUtils {
             }
             return new StoreKeyConfig(keyStorePath, keyStoreType, keyStorePassword, keyStoreKeyPassword, keyStoreAlgorithm,
                     trustStoreAlgorithm);
+        }
+
+        if (keyStoreProvider != null) {
+            String keyStoreAlgorithm = keyPair.keystoreAlgorithm.get(settings);
+            SecureString keyStorePassword = keyPair.keystorePassword.get(settings);
+            SecureString keyStoreKeyPassword = keyPair.keystoreKeyPassword.get(settings);
+            if (keyStoreKeyPassword.length() == 0) {
+                keyStoreKeyPassword = keyStorePassword;
+            }
+            return new StoreKeyConfig(keyStoreProvider, keyStorePassword, keyStoreKeyPassword, keyStoreAlgorithm, trustStoreAlgorithm);
         }
         return null;
 
