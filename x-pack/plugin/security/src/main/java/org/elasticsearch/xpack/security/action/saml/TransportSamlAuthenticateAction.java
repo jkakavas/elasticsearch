@@ -62,10 +62,9 @@ public final class TransportSamlAuthenticateAction extends HandledTransportActio
                 final Map<String, Object> tokenMeta = (Map<String, Object>) result.getMetadata().get(SamlRealm.CONTEXT_TOKEN_DATA);
                 tokenService.createUserToken(authentication, originatingAuthentication,
                         ActionListener.wrap(tuple -> {
-                            final String tokenString = tokenService.getUserTokenString(tuple.v1());
                             final TimeValue expiresIn = tokenService.getExpirationDelay();
                             listener.onResponse(
-                                    new SamlAuthenticateResponse(authentication.getUser().principal(), tokenString, tuple.v2(), expiresIn));
+                                new SamlAuthenticateResponse(authentication.getUser().principal(), tuple.v1(), tuple.v2(), expiresIn));
                         }, listener::onFailure), tokenMeta, true);
             }, e -> {
                 logger.debug(() -> new ParameterizedMessage("SamlToken [{}] could not be authenticated", saml), e);

@@ -66,7 +66,7 @@ public class TokenAuthIntegTests extends SecurityIntegTestCase {
         return defaultMaxNumberOfNodes() + 1;
     }
 
-    public void testTokenServiceBootstrapOnNodeJoin() throws Exception {
+    public void testTokenServiceBootstrapOnNodeJoin() {
         final Client client = client();
         SecurityClient securityClient = new SecurityClient(client);
         CreateTokenResponse response = securityClient.prepareCreateToken()
@@ -76,55 +76,23 @@ public class TokenAuthIntegTests extends SecurityIntegTestCase {
                 .get();
         for (TokenService tokenService : internalCluster().getInstances(TokenService.class)) {
             PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-            tokenService.decodeToken(response.getTokenString(), userTokenFuture);
+            tokenService.findTokenDocument(response.getTokenString(), userTokenFuture);
             assertNotNull(userTokenFuture.actionGet());
         }
         // start a new node and see if it can decrypt the token
         String nodeName = internalCluster().startNode();
         for (TokenService tokenService : internalCluster().getInstances(TokenService.class)) {
             PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-            tokenService.decodeToken(response.getTokenString(), userTokenFuture);
+            tokenService.findTokenDocument(response.getTokenString(), userTokenFuture);
             assertNotNull(userTokenFuture.actionGet());
         }
 
         TokenService tokenService = internalCluster().getInstance(TokenService.class, nodeName);
         PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-        tokenService.decodeToken(response.getTokenString(), userTokenFuture);
+        tokenService.findTokenDocument(response.getTokenString(), userTokenFuture);
         assertNotNull(userTokenFuture.actionGet());
     }
 
-
-    public void testTokenServiceCanRotateKeys() throws Exception {
-        final Client client = client();
-        SecurityClient securityClient = new SecurityClient(client);
-        CreateTokenResponse response = securityClient.prepareCreateToken()
-                .setGrantType("password")
-                .setUsername(SecuritySettingsSource.TEST_USER_NAME)
-                .setPassword(new SecureString(SecuritySettingsSourceField.TEST_PASSWORD.toCharArray()))
-                .get();
-        String masterName = internalCluster().getMasterName();
-        TokenService masterTokenService = internalCluster().getInstance(TokenService.class, masterName);
-        String activeKeyHash = masterTokenService.getActiveKeyHash();
-        for (TokenService tokenService : internalCluster().getInstances(TokenService.class)) {
-            PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-            tokenService.decodeToken(response.getTokenString(), userTokenFuture);
-            assertNotNull(userTokenFuture.actionGet());
-            assertEquals(activeKeyHash, tokenService.getActiveKeyHash());
-        }
-        client().admin().cluster().prepareHealth().execute().get();
-        PlainActionFuture<ClusterStateUpdateResponse> rotateActionFuture = new PlainActionFuture<>();
-        logger.info("rotate on master: {}", masterName);
-        masterTokenService.rotateKeysOnMaster(rotateActionFuture);
-        assertTrue(rotateActionFuture.actionGet().isAcknowledged());
-        assertNotEquals(activeKeyHash, masterTokenService.getActiveKeyHash());
-
-        for (TokenService tokenService : internalCluster().getInstances(TokenService.class)) {
-            PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-            tokenService.decodeToken(response.getTokenString(), userTokenFuture);
-            assertNotNull(userTokenFuture.actionGet());
-            assertNotEquals(activeKeyHash, tokenService.getActiveKeyHash());
-        }
-    }
 
     @TestLogging("org.elasticsearch.xpack.security.authc:DEBUG")
     public void testExpiredTokensDeletedAfterExpiration() throws Exception {
