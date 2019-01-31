@@ -11,7 +11,6 @@ import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -76,20 +75,20 @@ public class TokenAuthIntegTests extends SecurityIntegTestCase {
                 .get();
         for (TokenService tokenService : internalCluster().getInstances(TokenService.class)) {
             PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-            tokenService.findTokenDocument(response.getTokenString(), userTokenFuture);
+            tokenService.findUserToken(response.getTokenString(), userTokenFuture);
             assertNotNull(userTokenFuture.actionGet());
         }
         // start a new node and see if it can decrypt the token
         String nodeName = internalCluster().startNode();
         for (TokenService tokenService : internalCluster().getInstances(TokenService.class)) {
             PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-            tokenService.findTokenDocument(response.getTokenString(), userTokenFuture);
+            tokenService.findUserToken(response.getTokenString(), userTokenFuture);
             assertNotNull(userTokenFuture.actionGet());
         }
 
         TokenService tokenService = internalCluster().getInstance(TokenService.class, nodeName);
         PlainActionFuture<UserToken> userTokenFuture = new PlainActionFuture<>();
-        tokenService.findTokenDocument(response.getTokenString(), userTokenFuture);
+        tokenService.findUserToken(response.getTokenString(), userTokenFuture);
         assertNotNull(userTokenFuture.actionGet());
     }
 

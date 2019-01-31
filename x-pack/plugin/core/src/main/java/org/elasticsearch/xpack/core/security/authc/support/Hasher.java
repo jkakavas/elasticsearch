@@ -352,6 +352,24 @@ public enum Hasher {
         }
     },
 
+    SHA256() {
+        @Override
+        public char[] hash(SecureString textWithSalt) {
+            MessageDigest md = MessageDigests.sha256();
+            md.update(CharArrays.toUtf8Bytes(textWithSalt.getChars()));
+            String hash = Base64.getEncoder().encodeToString(md.digest());
+            char[] result = new char[SHA256_PREFIX.length() + hash.length()];
+            System.arraycopy(SHA256_PREFIX.toCharArray(), 0, result, 0, SSHA256_PREFIX.length());
+            System.arraycopy(hash.toCharArray(), 0, result, SSHA256_PREFIX.length(), hash.length());
+            return result;
+        }
+
+        @Override
+        public boolean verify(SecureString data, char[] hash) {
+            return false;
+        }
+    },
+
     NOOP() {
         @Override
         public char[] hash(SecureString text) {
@@ -368,6 +386,7 @@ public enum Hasher {
     private static final String SHA1_PREFIX = "{SHA}";
     private static final String MD5_PREFIX = "{MD5}";
     private static final String SSHA256_PREFIX = "{SSHA256}";
+    private static final String SHA256_PREFIX = "{SHA256}";
     private static final String PBKDF2_PREFIX = "{PBKDF2}";
     private static final int PBKDF2_DEFAULT_COST = 10000;
     private static final int PBKDF2_KEY_LENGTH = 256;
