@@ -650,7 +650,7 @@ public class TokenServiceTests extends ESTestCase {
 
     protected String getDeprecatedAccessTokenString(TokenService tokenService, UserToken userToken) throws IOException,
         GeneralSecurityException {
-        try (ByteArrayOutputStream os = new ByteArrayOutputStream(TokenService.MINIMUM_BASE64_BYTES);
+        try (ByteArrayOutputStream os = new ByteArrayOutputStream(TokenService.LEGACY_MINIMUM_BASE64_BYTES);
              OutputStream base64 = Base64.getEncoder().wrap(os);
              StreamOutput out = new OutputStreamStreamOutput(base64)) {
             out.setVersion(Version.V_7_0_0);
