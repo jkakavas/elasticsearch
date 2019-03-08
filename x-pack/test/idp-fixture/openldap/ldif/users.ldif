@@ -1,0 +1,222 @@
+dn: ou=people,{{ LDAP_BASE_DN }}
+objectClass: top
+objectClass: organizationalUnit
+ou: people
+
+dn: uid=kraken,ou=people,{{ LDAP_BASE_DN }}
+uid: kraken
+uidNumber: 1000
+gidNumber: 1000
+cn: Commander Kraken
+sn: Commander Kraken
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: kraken@{{ LDAP_DOMAIN }}
+
+dn: uid=hulk,ou=people,{{ LDAP_BASE_DN }}
+uid: hulk
+uidNumber: 1001
+gidNumber: 1001
+cn: Bruce Banner
+sn: Bruce Banner
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: hulk@{{ LDAP_DOMAIN }}
+
+dn: uid=hawkeye,ou=people,{{ LDAP_BASE_DN }}
+uid: hawkeye
+uidNumber: 1002
+gidNumber: 1002
+cn: Clint Barton
+sn: Clint Barton
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: hawkeye@{{ LDAP_DOMAIN }}
+
+dn: uid=jarvis,ou=people,{{ LDAP_BASE_DN }}
+uid: jarvis
+uidNumber: 1003
+gidNumber: 1003
+cn: Jarvis
+sn: Jarvis
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: jarvis@{{ LDAP_DOMAIN }}
+
+dn: uid=blackwidow,ou=people,{{ LDAP_BASE_DN }}
+uid: blackwidow
+uidNumber: 1004
+gidNumber: 1004
+cn: Natasha Romanova
+sn: Natasha Romanova
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: blackwidow@{{ LDAP_DOMAIN }}
+
+dn: uid=fury,ou=people,{{ LDAP_BASE_DN }}
+uid: fury
+uidNumber: 1005
+gidNumber: 1005
+cn: Nick Fury
+sn: Nick Fury
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: fury@{{ LDAP_DOMAIN }}
+
+dn: uid=phil,ou=people,{{ LDAP_BASE_DN }}
+uid: phil
+uidNumber: 1006
+gidNumber: 1006
+cn: Phil Colson
+sn: Phil Colson
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: phil@{{ LDAP_DOMAIN }}
+
+dn: uid=cap,ou=people,{{ LDAP_BASE_DN }}
+uid: cap
+uidNumber: 1007
+gidNumber: 1007
+cn: Steve Rogers
+sn: Steve Rogers
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: cap@{{ LDAP_DOMAIN }}
+
+dn: uid=thor,ou=people,{{ LDAP_BASE_DN }}
+uid: thor
+uidNumber: 1008
+gidNumber: 1008
+cn: Thor Odinson
+sn: Thor Odinson
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: thor@{{ LDAP_DOMAIN }}
+
+dn: uid=ironman,ou=people,{{ LDAP_BASE_DN }}
+uid: ironman
+uidNumber: 1009
+gidNumber: 1009
+cn: Tony Stark
+sn: Tony Stark
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: ironman@{{ LDAP_DOMAIN }}
+
+dn: uid=odin,ou=people,{{ LDAP_BASE_DN }}
+uid: odin
+uidNumber: 1010
+gidNumber: 1010
+cn: Gods
+sn: Gods
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: odin@{{ LDAP_DOMAIN }}
+
+dn: uid=selvig,ou=people,{{ LDAP_BASE_DN }}
+uid: selvig
+uidNumber: 1011
+gidNumber: 1011
+cn: Erik Selvig
+sn: Erik Selvig
+objectClass: top
+objectClass: posixAccount
+objectClass: inetOrgPerson
+userPassword: NickFuryHeartsES
+mail: selvig@{{ LDAP_DOMAIN }}
+
+dn: cn=Hydra,ou=people,{{ LDAP_BASE_DN }}
+cn: Hydra
+objectClass: top
+objectClass: posixGroup
+gid: 101
+memberUid: raken
+
+dn: cn=Geniuses,ou=people,{{ LDAP_BASE_DN }}
+cn: Geniuses
+objectClass: top
+objectClass: posixGroup
+gid: 102
+memberUid: hulk
+memberUid: ironman
+memberUid: selvig
+
+dn: cn=SHIELD,ou=people,{{ LDAP_BASE_DN }}
+cn: SHIELD
+objectClass: top
+objectClass: posixGroup
+gid: 103
+memberUid: hulk
+memberUid: hawkeye
+memberUid: blackwidow
+memberUid: fury
+memberUid: phil
+memberUid: cap
+memberUid: thor
+memberUid: ironman
+
+dn: cn=Philanthropists,ou=people,{{ LDAP_BASE_DN }}
+cn: Philanthropists
+objectClass: top
+objectClass: posixGroup
+gid: 104
+memberUid: hulk
+memberUid: thor
+memberUid: ironman
+
+dn: cn=Avengers,ou=people,{{ LDAP_BASE_DN }}
+cn: Avengers
+objectClass: top
+objectClass: posixGroup
+gid: 105
+memberUid: hulk
+memberUid: hawkeye
+memberUid: blackwidow
+memberUid: fury
+memberUid: cap
+memberUid: thor
+memberUid: ironman
+
+dn: cn=Gods,ou=people,{{ LDAP_BASE_DN }}
+cn: Gods
+objectClass: top
+objectClass: posixGroup
+gid: 106
+memberUid: thor
+memberUid: odin
+
+dn: cn=Playboys,ou=people,{{ LDAP_BASE_DN }}
+cn: Playboys
+objectClass: top
+objectClass: posixGroup
+gid: 107
+memberUid: ironman
+
+dn: cn=Billionaries,ou=people,{{ LDAP_BASE_DN }}
+cn: Billionaries
+objectClass: top
+objectClass: posixGroup
+gid: 108
+memberUid: ironman

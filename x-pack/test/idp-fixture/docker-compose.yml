@@ -1,0 +1,18 @@
+version: '3'
+services:
+  openldap:
+    image: "osixia/openldap:1.2.3"
+    ports:
+      - "389"
+      - "636"
+    environment:
+      LDAP_ADMIN_PASSWORD: "NickFuryHeartsES"
+      LDAP_DOMAIN: "oldap.test.elasticsearch.com"
+      LDAP_BASE_DN: "DC=oldap,DC=test,DC=elasticsearch,DC=com"
+      LDAP_TLS_CRT_FILENAME: "ldap_server.pem"
+      LDAP_TLS_KEY_FILENAME: "ldap_server.key"
+    tty: true
+    stdin_open: true
+    volumes:
+      - .ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom
+      - .certs:/container/service/slapd/assets/certs

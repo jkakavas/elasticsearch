@@ -1,6 +1,9 @@
 - name: Install python-ldap dependecies
   apt: name={{ item }} state=installed update_cache=yes
   with_items:
+    - dbus
+    - dbus-user-session
+    - build-essential
     - libsasl2-dev
     - python-dev
     - libldap2-dev
