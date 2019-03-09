@@ -17,9 +17,11 @@ testFixtures.useFixture ":x-pack:test:idp-fixture"
 
 String outputDir = "${project.buildDir}/generated-resources/${project.name}"
 task copyIdpCertificate(type: Copy) {
-    from idpFixtureProject.file('src/main/resources/certs/ca.crt');
+    from idpFixtureProject.file('idp/shibboleth-idp/credentials/idp-browser.pem');
     into outputDir
 }
+project.sourceSets.test.output.dir(outputDir, builtBy: copyIdpCertificate)
+integTestCluster.dependsOn copyIdpCertificate
 
 integTestCluster {
   setting 'xpack.license.self_generated.type', 'trial'
@@ -50,7 +52,7 @@ integTestCluster {
 
   setting 'xpack.ml.enabled', 'false'
 
-  extraConfigFile 'idp-metadata.xml', idpFixtureProject.file("src/main/resources/provision/generated/idp-metadata.xml")
+  extraConfigFile 'idp-metadata.xml', idpFixtureProject.file("idp/shibboleth-idp/metadata/idp-metadata.xml")
 
   setupCommand 'setupTestAdmin',
             'bin/elasticsearch-users', 'useradd', "test_admin", '-p', 'x-pack-test-password', '-r', "superuser"
