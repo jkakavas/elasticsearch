@@ -5,6 +5,8 @@
  */
 package org.elasticsearch.xpack.core.ssl;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.settings.SecureString;
@@ -38,6 +40,7 @@ class PEMKeyConfig extends KeyConfig {
     private final String keyPath;
     private final SecureString keyPassword;
     private final String certPath;
+    private static final Logger logger = LogManager.getLogger(PemUtils.class);
 
     /**
      * Creates a new key configuration backed by the key and certificate chain provided
@@ -94,6 +97,7 @@ class PEMKeyConfig extends KeyConfig {
     }
 
     private static PrivateKey readPrivateKey(Path keyPath, SecureString keyPassword) throws IOException {
+        logger.info("PEMKEYCONFIG PASSWORD IS:" + new String(keyPassword.getChars()));
         return PemUtils.readPrivateKey(keyPath, keyPassword::getChars);
     }
 

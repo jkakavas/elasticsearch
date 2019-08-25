@@ -62,7 +62,7 @@ public class PemUtils {
     private static final String OPENSSL_EC_PARAMS_FOOTER = "-----END EC PARAMETERS-----";
     private static final String HEADER = "-----BEGIN";
 
-    private static final Logger logger = LogManager.getLogger(SSLService.class);
+    private static final Logger logger = LogManager.getLogger(PemUtils.class);
 
     private PemUtils() {
         throw new IllegalStateException("Utility class should not be instantiated");
