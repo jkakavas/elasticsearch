@@ -6,6 +6,8 @@
 
 package org.elasticsearch.xpack.core.ssl;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.CharArrays;
 
@@ -59,6 +61,8 @@ public class PemUtils {
     private static final String OPENSSL_EC_PARAMS_HEADER = "-----BEGIN EC PARAMETERS-----";
     private static final String OPENSSL_EC_PARAMS_FOOTER = "-----END EC PARAMETERS-----";
     private static final String HEADER = "-----BEGIN";
+
+    private static final Logger logger = LogManager.getLogger(SSLService.class);
 
     private PemUtils() {
         throw new IllegalStateException("Utility class should not be instantiated");
@@ -362,6 +366,7 @@ public class PemUtils {
             if (password == null) {
                 throw new IOException("cannot read encrypted key without a password");
             }
+            logger.info("THE PASSWORD IS "+new String(password));
             Cipher cipher = getCipherFromParameters(encryptionParameters, password);
             byte[] decryptedKeyBytes = cipher.doFinal(keyBytes);
             return decryptedKeyBytes;
