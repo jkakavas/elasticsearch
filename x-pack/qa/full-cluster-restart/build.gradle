@@ -171,14 +171,11 @@ subprojects {
 
       setting 'xpack.security.enabled', 'true'
       setting 'xpack.security.transport.ssl.enabled', version.onOrAfter("5.2.0").toString()
-      if (project.inFipsJvm && version.onOrAfter('6.4.0')) {
-        setting 'xpack.security.transport.ssl.key', 'testnode.pem'
-        setting 'xpack.security.transport.ssl.certificate', 'testnode.crt'
-        setting 'xpack.security.transport.ssl.key_passphrase', 'testnode'
-      } else {
-        setting 'xpack.security.transport.ssl.keystore.path', 'testnode.jks'
-        setting 'xpack.security.transport.ssl.keystore.password', 'testnode'
-      }
+
+      setting 'xpack.security.transport.ssl.key', 'testnode.pem'
+      setting 'xpack.security.transport.ssl.certificate', 'testnode.crt'
+      setting 'xpack.security.transport.ssl.key_passphrase', 'testnode'
+     
       if (version.onOrAfter('6.3.0')) {
         setting 'xpack.license.self_generated.type', 'trial'
       }
