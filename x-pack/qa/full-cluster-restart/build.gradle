@@ -174,7 +174,7 @@ subprojects {
       if (project.inFipsJvm && version.onOrAfter('6.4.0')) {
         setting 'xpack.security.transport.ssl.key', 'testnode.pem'
         setting 'xpack.security.transport.ssl.certificate', 'testnode.crt'
-        keystoreSetting 'xpack.security.transport.ssl.secure_key_passphrase', 'testnode'
+        setting 'xpack.security.transport.ssl.key_passphrase', 'testnode'
       } else {
         setting 'xpack.security.transport.ssl.keystore.path', 'testnode.jks'
         setting 'xpack.security.transport.ssl.keystore.password', 'testnode'
