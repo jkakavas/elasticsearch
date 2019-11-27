@@ -14,6 +14,8 @@ import org.elasticsearch.env.TestEnvironment;
 import org.elasticsearch.license.XPackLicenseState;
 import org.elasticsearch.license.XPackLicenseState.AllowedRealmType;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.watcher.ResourceWatcher;
+import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationToken;
 import org.elasticsearch.xpack.core.security.authc.Realm;
@@ -25,6 +27,7 @@ import org.elasticsearch.xpack.core.security.authc.ldap.LdapRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;
 import org.elasticsearch.xpack.core.security.user.User;
+import org.elasticsearch.xpack.core.ssl.SSLService;
 import org.elasticsearch.xpack.security.authc.esnative.ReservedRealm;
 import org.junit.Before;
 
@@ -57,6 +60,8 @@ public class RealmsTests extends ESTestCase {
     private XPackLicenseState licenseState;
     private ThreadContext threadContext;
     private ReservedRealm reservedRealm;
+    private ResourceWatcherService resourceWatcherService;
+    private SSLService sslService;
     private int randomRealmTypesCount;
 
     @Before
@@ -73,6 +78,8 @@ public class RealmsTests extends ESTestCase {
         licenseState = mock(XPackLicenseState.class);
         threadContext = new ThreadContext(Settings.EMPTY);
         reservedRealm = mock(ReservedRealm.class);
+        sslService = mock(SSLService.class);
+        resourceWatcherService = mock(ResourceWatcherService.class);
         when(licenseState.isAuthAllowed()).thenReturn(true);
         when(licenseState.allowedRealmType()).thenReturn(AllowedRealmType.ALL);
         when(reservedRealm.type()).thenReturn(ReservedRealm.TYPE);
@@ -94,7 +101,7 @@ public class RealmsTests extends ESTestCase {
         }
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
 
         Iterator<Realm> iterator = realms.iterator();
         assertThat(iterator.hasNext(), is(true));
@@ -134,7 +141,7 @@ public class RealmsTests extends ESTestCase {
         }
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
 
         Iterator<Realm> iterator = realms.iterator();
         assertThat(iterator.hasNext(), is(true));
@@ -164,7 +171,7 @@ public class RealmsTests extends ESTestCase {
                 .build();
         Environment env = TestEnvironment.newEnvironment(settings);
         try {
-            new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+            new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
             fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), containsString("multiple [file] realms are configured"));
@@ -180,14 +187,14 @@ public class RealmsTests extends ESTestCase {
             .build();
         Environment env = TestEnvironment.newEnvironment(settings);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () ->{
-            new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+            new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
         });
         assertThat(e.getMessage(), containsString("Found multiple realms configured with the same name"));
     }
 
     public void testWithEmptySettings() throws Exception {
         Realms realms = new Realms(Settings.EMPTY, TestEnvironment.newEnvironment(Settings.builder().put("path.home",
-                createTempDir()).build()), factories, licenseState, threadContext, reservedRealm);
+                createTempDir()).build()), factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
         Iterator<Realm> iter = realms.iterator();
         assertThat(iter.hasNext(), is(true));
         Realm realm = iter.next();
@@ -221,7 +228,7 @@ public class RealmsTests extends ESTestCase {
         }
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
 
         // this is the iterator when licensed
         Iterator<Realm> iter = realms.iterator();
@@ -307,7 +314,7 @@ public class RealmsTests extends ESTestCase {
                 .put("xpack.security.authc.realms.type_0.custom.order", "1");
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
         Iterator<Realm> iter = realms.iterator();
         assertThat(iter.hasNext(), is(true));
         Realm realm = iter.next();
@@ -376,7 +383,7 @@ public class RealmsTests extends ESTestCase {
                 .put("xpack.security.authc.realms." + type + ".native.order", "1");
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
         Iterator<Realm> iter = realms.iterator();
         assertThat(iter.hasNext(), is(true));
         Realm realm = iter.next();
@@ -414,7 +421,7 @@ public class RealmsTests extends ESTestCase {
                 .put("xpack.security.authc.realms." + selectedRealmType + ".foo.order", "0");
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
         Iterator<Realm> iter = realms.iterator();
         assertThat(iter.hasNext(), is(true));
         Realm realm = iter.next();
@@ -482,7 +489,7 @@ public class RealmsTests extends ESTestCase {
         }
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
         Iterator<Realm> iterator = realms.iterator();
         Realm realm = iterator.next();
         assertThat(realm, is(reservedRealm));
@@ -523,7 +530,7 @@ public class RealmsTests extends ESTestCase {
                 .put("xpack.security.authc.realms." + FileRealmSettings.TYPE + ".realm_1.order", 0)
                 .build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
 
         assertThat(realms.iterator().hasNext(), is(true));
 
@@ -539,7 +546,7 @@ public class RealmsTests extends ESTestCase {
                 .put("xpack.security.authc.realms.type_0.bar.order", "1");
         Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
-        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm);
+        Realms realms = new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
 
         PlainActionFuture<Map<String, Object>> future = new PlainActionFuture<>();
         realms.usageStats(future);
@@ -609,7 +616,7 @@ public class RealmsTests extends ESTestCase {
         final Settings settings = builder.build();
         Environment env = TestEnvironment.newEnvironment(settings);
         final IllegalArgumentException iae = expectThrows(IllegalArgumentException.class,
-                () -> new Realms(settings, env, factories, licenseState, threadContext, reservedRealm));
+                () -> new Realms(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService));
         assertThat(iae.getMessage(), is(equalTo(
                 "multiple realms [realm_1, realm_2] configured of type [kerberos], [kerberos] can only have one such realm configured")));
     }

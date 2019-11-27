@@ -10,9 +10,11 @@ import org.apache.logging.log4j.LogManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.license.XPackLicenseState;
+import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xpack.core.security.authc.support.DelegatedAuthorizationSettings;
 import org.elasticsearch.xpack.core.XPackField;
 import org.elasticsearch.xpack.core.security.user.User;
+import org.elasticsearch.xpack.core.ssl.SSLService;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -148,6 +150,11 @@ public abstract class Realm implements Comparable<Realm> {
      * @see DelegatedAuthorizationSettings
      */
     public void initialize(Iterable<Realm> realms, XPackLicenseState licenseState) {
+    }
+
+    public Realm reloadConfig(RealmConfig newConfig, Realm oldRealm, SSLService sslService,
+                              ResourceWatcherService watcherService) throws Exception{
+        return this;
     }
 
     /**

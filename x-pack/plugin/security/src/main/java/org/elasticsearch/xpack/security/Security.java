@@ -242,7 +242,9 @@ import org.elasticsearch.xpack.security.transport.netty4.SecurityNetty4ServerTra
 import org.elasticsearch.xpack.security.transport.nio.SecurityNioHttpServerTransport;
 import org.elasticsearch.xpack.security.transport.nio.SecurityNioTransport;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -260,6 +262,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
@@ -301,8 +304,8 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
     }
 
     Security(Settings settings, final Path configPath, List<SecurityExtension> extensions) {
-        this.settings = settings;
         this.env = new Environment(settings, configPath);
+        this.settings = gatherRealmSettings(env).put(settings).build();
         this.enabled = XPackSettings.SECURITY_ENABLED.get(settings);
         if (enabled) {
             runStartupChecks(settings);
@@ -322,6 +325,21 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
         }
         this.securityExtensions.addAll(extensions);
 
+    }
+
+    private Settings.Builder gatherRealmSettings(Environment env) {
+        try (Stream<Path> walk = Files.walk(Paths.get(env.configFile().toUri()))) {
+            Settings.Builder realmSettingsBuilder = Settings.builder();
+            List<Path> realmConfigFiles = walk
+                .filter(Files::isRegularFile)
+                .filter(fileName -> fileName.toString().endsWith("_realm.yml")).collect(Collectors.toList());
+            for (Path configFile : realmConfigFiles) {
+                realmSettingsBuilder.put(Settings.builder().loadFromPath(configFile).build());
+            }
+            return realmSettingsBuilder;
+        } catch (Exception e) {
+            throw new IllegalStateException("d");
+        }
     }
 
     private static void runStartupChecks(Settings settings) {
@@ -395,7 +413,8 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
                 }
             }
         }
-        final Realms realms = new Realms(settings, env, realmFactories, getLicenseState(), threadPool.getThreadContext(), reservedRealm);
+        final Realms realms = new Realms(settings, env, realmFactories, getLicenseState(), threadPool.getThreadContext(), reservedRealm,
+            resourceWatcherService, getSslService());
         components.add(nativeUsersStore);
         components.add(nativeRoleMappingStore);
         components.add(realms);

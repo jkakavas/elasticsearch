@@ -45,6 +45,10 @@ public class SamlLogoutRequestHandler extends SamlRequestHandler {
         super(clock, idp, sp, maxSkew);
     }
 
+    SamlLogoutRequestHandler(SamlLogoutRequestHandler cloneFrom, IdpConfiguration idp, SpConfiguration sp) {
+        super(cloneFrom, idp, sp);
+    }
+
     /**
      * Processes the provided LogoutRequest and extracts the NameID and SessionIndex.
      * Returns these in a {@link SamlAttributes} object with an empty attributes list.

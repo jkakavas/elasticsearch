@@ -7,6 +7,8 @@ package org.elasticsearch.xpack.security.authc;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.collect.MapBuilder;
@@ -16,14 +18,21 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.license.XPackLicenseState;
 import org.elasticsearch.license.XPackLicenseState.AllowedRealmType;
+import org.elasticsearch.watcher.FileChangesListener;
+import org.elasticsearch.watcher.FileWatcher;
+import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xpack.core.security.authc.Realm;
 import org.elasticsearch.xpack.core.security.authc.RealmConfig;
 import org.elasticsearch.xpack.core.security.authc.RealmSettings;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.file.FileRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.kerberos.KerberosRealmSettings;
+import org.elasticsearch.xpack.core.ssl.SSLConfiguration;
+import org.elasticsearch.xpack.core.ssl.SSLService;
 import org.elasticsearch.xpack.security.authc.esnative.ReservedRealm;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -52,6 +61,7 @@ public class Realms implements Iterable<Realm> {
     private final XPackLicenseState licenseState;
     private final ThreadContext threadContext;
     private final ReservedRealm reservedRealm;
+    private final SSLService sslService;
 
     protected List<Realm> realms;
     // a list of realms that are considered standard in that they are provided by x-pack and
@@ -61,13 +71,15 @@ public class Realms implements Iterable<Realm> {
     List<Realm> nativeRealmsOnly;
 
     public Realms(Settings settings, Environment env, Map<String, Realm.Factory> factories, XPackLicenseState licenseState,
-                  ThreadContext threadContext, ReservedRealm reservedRealm) throws Exception {
+                  ThreadContext threadContext, ReservedRealm reservedRealm, ResourceWatcherService resourceWatcherService,
+                  SSLService sslService) throws Exception {
         this.settings = settings;
         this.env = env;
         this.factories = factories;
         this.licenseState = licenseState;
         this.threadContext = threadContext;
         this.reservedRealm = reservedRealm;
+        this.sslService = sslService;
         assert factories.get(ReservedRealm.TYPE) == null;
         this.realms = initRealms();
         // pre-computing a list of internal only realms allows us to have much cheaper iteration than a custom iterator
@@ -97,6 +109,13 @@ public class Realms implements Iterable<Realm> {
 
         this.standardRealmsOnly = Collections.unmodifiableList(standardRealms);
         this.nativeRealmsOnly = Collections.unmodifiableList(nativeRealms);
+        FileWatcher watcher = new FileWatcher(env.configFile());
+        watcher.addListener(new FileListener(logger));
+        try {
+            resourceWatcherService.add(watcher, ResourceWatcherService.Frequency.HIGH);
+        } catch (IOException e) {
+            throw new ElasticsearchException("failed to start file watcher for role settings", e);
+        }
         realms.forEach(r -> r.initialize(this, licenseState));
     }
 
@@ -239,6 +258,40 @@ public class Realms implements Iterable<Realm> {
         return realms;
     }
 
+    public void possiblyReplaceRealmSettings(Path realmSettingsFile) throws Exception{
+        Settings newRealmSettings = Settings.builder().loadFromPath(realmSettingsFile).build();
+        Map<RealmConfig.RealmIdentifier, Settings> newRealmSettingsMap =
+            RealmSettings.getRealmSettings(Settings.builder().loadFromPath(realmSettingsFile).build());
+        for (Entry<RealmConfig.RealmIdentifier, Settings> realmAndSettings: newRealmSettingsMap.entrySet()) {
+            RealmConfig.RealmIdentifier identifier = realmAndSettings.getKey();
+            Settings mergedSettings =
+                Settings.builder().put(RealmSettings.filterRealmSettings(settings)).put(newRealmSettings).build();
+            sslService.addOrReplaceRealmSSLSettings(identifier, newRealmSettings);
+            logger.info(realmAndSettings.getValue());
+            logger.info(mergedSettings);
+            Realm.Factory factory = factories.get(identifier.getType());
+            RealmConfig config = new RealmConfig(identifier, mergedSettings, env, threadContext);
+            Realm newRealm = factory.create(config);
+            if (this.realms.stream().anyMatch(r -> r.name().equals(newRealm.name()) && r.type().equals(newRealm.type()))) {
+                this.realms.replaceAll(oldRealm -> {
+                    if (oldRealm.name().equals(identifier.getName())) {
+                        if (oldRealm.getClass() == newRealm.getClass()) {
+                            return newRealm;
+                        } else {
+                            throw new IllegalArgumentException("Cannot replace realm [" + identifier.getName() + "] with a different realm type ([" +
+                                oldRealm.getClass().getSimpleName() + "] vs [" + newRealm.getClass().getSimpleName() + "])");
+                        }
+                    } else {
+                        return oldRealm;
+                    }
+                });
+            } else {
+                this.realms.add(newRealm);
+            }
+        }
+        Collections.sort(realms);
+    }
+
     public void usageStats(ActionListener<Map<String, Object>> listener) {
         Map<String, Object> realmMap = new HashMap<>();
         final AtomicBoolean failed = new AtomicBoolean(false);
@@ -354,4 +407,35 @@ public class Realms implements Iterable<Realm> {
         }
     }
 
+    private class FileListener implements FileChangesListener {
+
+        private final Logger logger;
+
+        FileListener(Logger logger) {
+            this.logger = logger;
+        }
+
+        @Override
+        public void onFileCreated(Path file) {
+            if (file.toString().endsWith("_realm.yml")) {
+                try {
+                    possiblyReplaceRealmSettings(file);
+                } catch (Exception e) {
+                    logger.error(new ParameterizedMessage("Error loading realm from {} ", file, e));
+                }
+            }
+        }
+
+        @Override
+        public void onFileDeleted(Path file) {
+            if (file.toString().endsWith("_realm.yml")) {
+                //TBD
+            }
+        }
+
+        @Override
+        public void onFileChanged(Path file) {
+            onFileCreated(file);
+        }
+    }
 }

@@ -232,6 +232,20 @@ public final class SamlRealm extends Realm implements Releasable {
     }
 
     @Override
+    public Realm reloadConfig(RealmConfig newConfig, Realm oldRealm, SSLService sslService, ResourceWatcherService watcherService) throws Exception {
+        assert oldRealm instanceof SamlRealm;
+        SamlRealm oldSamlRealm = (SamlRealm) oldRealm;
+        final Tuple<AbstractReloadingMetadataResolver, Supplier<EntityDescriptor>> tuple
+            = initializeResolver(logger, config, sslService, watcherService);
+        final AbstractReloadingMetadataResolver metadataResolver = tuple.v1();
+        final Supplier<EntityDescriptor> idpDescriptor = tuple.v2();
+        final IdpConfiguration idp = getIdpConfiguration(config, metadataResolver, idpDescriptor);
+        final SamlAuthenticator authenticator = new SamlAuthenticator(oldSamlRealm.authenticator, idp, oldSamlRealm.serviceProvider);
+        final SamlLogoutRequestHandler logoutHandler = new SamlLogoutRequestHandler(oldSamlRealm.logoutHandler, idp, oldSamlRealm.serviceProvider);
+        return new SamlRealm(newConfig, oldSamlRealm.roleMapper, authenticator,logoutHandler, idpDescriptor, oldSamlRealm.serviceProvider);
+    }
+
+    @Override
     public void initialize(Iterable<Realm> realms, XPackLicenseState licenseState) {
         if (delegatedRealms != null) {
             throw new IllegalStateException("Realm has already been initialized");

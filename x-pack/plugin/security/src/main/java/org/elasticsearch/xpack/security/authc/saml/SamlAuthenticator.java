@@ -57,6 +57,10 @@ class SamlAuthenticator extends SamlRequestHandler {
         super(clock, idp, sp, maxSkew);
     }
 
+    SamlAuthenticator(SamlAuthenticator cloneFrom, IdpConfiguration idp, SpConfiguration sp) {
+        super(cloneFrom, idp, sp);
+    }
+
     /**
      * Processes the provided SAML response within the provided token and, if valid, extracts the relevant attributes from it.
      *

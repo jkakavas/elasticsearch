@@ -25,6 +25,8 @@ import org.elasticsearch.common.ssl.SslDiagnostics;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.common.socket.SocketAccess;
+import org.elasticsearch.xpack.core.security.authc.RealmConfig;
+import org.elasticsearch.xpack.core.security.authc.RealmSettings;
 import org.elasticsearch.xpack.core.ssl.cert.CertificateInfo;
 import org.elasticsearch.xpack.core.watcher.WatcherField;
 
@@ -44,6 +46,9 @@ import javax.security.auth.x500.X500Principal;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -66,6 +71,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.elasticsearch.xpack.core.XPackSettings.DEFAULT_SUPPORTED_PROTOCOLS;
 
@@ -486,7 +492,7 @@ public class SSLService {
         Map<String, Settings> sslSettingsMap = new HashMap<>();
         sslSettingsMap.put(XPackSettings.HTTP_SSL_PREFIX, getHttpTransportSSLSettings(settings));
         sslSettingsMap.put("xpack.http.ssl", settings.getByPrefix("xpack.http.ssl."));
-        sslSettingsMap.putAll(getRealmsSSLSettings(settings));
+        sslSettingsMap.putAll(getRealmsSSLSettings(settings, env));
         sslSettingsMap.putAll(getMonitoringExporterSettings(settings));
         sslSettingsMap.put(WatcherField.EMAIL_NOTIFICATION_SSL_PREFIX, settings.getByPrefix(WatcherField.EMAIL_NOTIFICATION_SSL_PREFIX));
 
@@ -503,7 +509,8 @@ public class SSLService {
             validateServerConfiguration(context);
         }
 
-        return Collections.unmodifiableMap(sslContextHolders);
+        //return Collections.unmodifiableMap(sslContextHolders);
+        return sslContextHolders;
     }
 
     private SSLConfiguration loadConfiguration(String key, Settings settings, Map<SSLConfiguration, SSLContextHolder> contextHolders) {
@@ -518,6 +525,15 @@ public class SSLService {
             return configuration;
         } catch (Exception e) {
             throw new ElasticsearchSecurityException("failed to load SSL configuration [{}]", e, key);
+        }
+    }
+
+    void replaceConfiguration(String key, SSLConfiguration existingConfiguration, SSLConfiguration newConfiguration) {
+        try {
+            storeSslConfiguration(key, newConfiguration);
+            sslContexts.replace(existingConfiguration, createSslContext(newConfiguration));
+        } catch (Exception e) {
+            throw new ElasticsearchSecurityException("failed to replace SSL configuration [{}]", e, key);
         }
     }
 
@@ -731,10 +747,11 @@ public class SSLService {
     /**
      * @return A map of Settings prefix to Settings object
      */
-    private static Map<String, Settings> getRealmsSSLSettings(Settings settings) {
+    private static Map<String, Settings> getRealmsSSLSettings(Settings settings, Environment env) {
+        final Settings mergedSettings = Settings.builder().put(settings).put(gatherRealmSettings(env).build()).build();
         final Map<String, Settings> sslSettings = new HashMap<>();
         final String prefix = "xpack.security.authc.realms.";
-        final Map<String, Settings> settingsByRealmType = settings.getGroups(prefix);
+        final Map<String, Settings> settingsByRealmType = mergedSettings.getGroups(prefix);
         settingsByRealmType.forEach((realmType, typeSettings) -> {
                 final Optional<String> nonDottedSetting = typeSettings.keySet().stream().filter(k -> k.indexOf('.') == -1).findAny();
                 if (nonDottedSetting.isPresent()) {
@@ -750,6 +767,34 @@ public class SSLService {
             }
         );
         return sslSettings;
+    }
+
+    public void addOrReplaceRealmSSLSettings(RealmConfig.RealmIdentifier identifier, Settings settings) {
+        final String sslKey = RealmSettings.realmSslPrefix(identifier);
+        final SSLConfiguration existingConfiguration = getSSLConfiguration(sslKey);
+        if ( null == existingConfiguration){
+            loadConfiguration(sslKey, settings, sslContexts);
+        } else {
+            final SSLConfiguration newConfiguration = new SSLConfiguration(settings);
+            if (existingConfiguration.equals(newConfiguration) == false) {
+                replaceConfiguration(sslKey, existingConfiguration, newConfiguration);
+            }
+        }
+    }
+
+    private static Settings.Builder gatherRealmSettings(Environment env) {
+        try (Stream<Path> walk = Files.walk(Paths.get(env.configFile().toUri()))) {
+            Settings.Builder realmSettingsBuilder = Settings.builder();
+            List<Path> realmConfigFiles = walk
+                .filter(Files::isRegularFile)
+                .filter(fileName -> fileName.toString().endsWith("_realm.yml")).collect(Collectors.toList());
+            for (Path configFile : realmConfigFiles) {
+                realmSettingsBuilder.put(Settings.builder().loadFromPath(configFile).build());
+            }
+            return realmSettingsBuilder;
+        } catch (Exception e) {
+            throw new IllegalStateException("d");
+        }
     }
 
     private static Map<String, Settings> getTransportProfileSSLSettings(Settings settings) {

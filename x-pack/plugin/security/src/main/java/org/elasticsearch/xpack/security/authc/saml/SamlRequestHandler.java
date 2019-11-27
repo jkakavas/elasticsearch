@@ -97,11 +97,26 @@ public class SamlRequestHandler {
         this.sp = sp;
         this.maxSkew = maxSkew;
         this.unmarshallerFactory = getUnmarshallerFactory();
+        this.decrypter = buildDecrypter(sp);
+    }
+
+    protected SamlRequestHandler(SamlRequestHandler cloneFrom, IdpConfiguration idp, SpConfiguration sp) {
+        this.clock = cloneFrom.clock;
+        this.idp = idp;
+        this.sp = sp;
+        this.maxSkew = cloneFrom.maxSkew;
+        this.unmarshallerFactory = cloneFrom.unmarshallerFactory;
+        this.decrypter = buildDecrypter(sp);
+    }
+
+    private Decrypter buildDecrypter(SpConfiguration sp){
+
         if (sp.getEncryptionCredentials().isEmpty()) {
-            this.decrypter = null;
+            return null;
         } else {
-            this.decrypter = new Decrypter(null, createResolverForEncryptionKeys(), createResolverForEncryptedKeyElements());
+            return new Decrypter(null, createResolverForEncryptionKeys(), createResolverForEncryptedKeyElements());
         }
+
     }
 
     private KeyInfoCredentialResolver createResolverForEncryptionKeys() {

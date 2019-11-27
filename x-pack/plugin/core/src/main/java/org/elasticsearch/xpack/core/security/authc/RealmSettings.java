@@ -99,6 +99,10 @@ public class RealmSettings {
                 .collect(Collectors.toMap(Tuple::v1, Tuple::v2));
     }
 
+    public static Settings filterRealmSettings(Settings globalSettings) {
+        return globalSettings.filter(key -> key.startsWith(RealmSettings.PREFIX) == false);
+    }
+
     /**
      * Performs any necessary verifications on a realms settings that are not automatically applied by Settings validation infrastructure.
      */

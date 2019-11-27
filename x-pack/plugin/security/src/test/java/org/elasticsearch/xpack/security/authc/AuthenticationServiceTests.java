@@ -55,6 +55,7 @@ import org.elasticsearch.threadpool.FixedExecutorBuilder;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportMessage;
+import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xpack.core.XPackField;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
@@ -74,6 +75,7 @@ import org.elasticsearch.xpack.core.security.index.RestrictedIndicesNames;
 import org.elasticsearch.xpack.core.security.user.AnonymousUser;
 import org.elasticsearch.xpack.core.security.user.SystemUser;
 import org.elasticsearch.xpack.core.security.user.User;
+import org.elasticsearch.xpack.core.ssl.SSLService;
 import org.elasticsearch.xpack.security.audit.AuditTrailService;
 import org.elasticsearch.xpack.security.audit.AuditUtil;
 import org.elasticsearch.xpack.security.authc.AuthenticationService.Authenticator;
@@ -149,6 +151,8 @@ public class AuthenticationServiceTests extends ESTestCase {
     private SecurityIndexManager securityIndex;
     private Client client;
     private InetSocketAddress remoteAddress;
+    private SSLService sslService;
+    private ResourceWatcherService resourceWatcherService;
 
     private String concreteSecurityIndexName;
 
@@ -186,9 +190,11 @@ public class AuthenticationServiceTests extends ESTestCase {
         ReservedRealm reservedRealm = mock(ReservedRealm.class);
         when(reservedRealm.type()).thenReturn("reserved");
         when(reservedRealm.name()).thenReturn("reserved_realm");
+        sslService = new SSLService(settings, TestEnvironment.newEnvironment(settings));
+        resourceWatcherService = mock(ResourceWatcherService.class);
         realms = spy(new TestRealms(Settings.EMPTY, TestEnvironment.newEnvironment(settings), Collections.<String, Realm.Factory>emptyMap(),
                 licenseState, threadContext, reservedRealm, Arrays.asList(firstRealm, secondRealm),
-                Collections.singletonList(firstRealm)));
+                Collections.singletonList(firstRealm), resourceWatcherService, sslService));
 
         auditTrail = mock(AuditTrailService.class);
         client = mock(Client.class);
@@ -227,6 +233,7 @@ public class AuthenticationServiceTests extends ESTestCase {
         ClusterService clusterService = ClusterServiceUtils.createClusterService(threadPool);
         apiKeyService = new ApiKeyService(settings, Clock.systemUTC(), client, licenseState, securityIndex, clusterService, threadPool);
         tokenService = new TokenService(settings, Clock.systemUTC(), client, licenseState, securityIndex, securityIndex, clusterService);
+
         service = new AuthenticationService(settings, realms, auditTrail, new DefaultAuthenticationFailureHandler(Collections.emptyMap()),
             threadPool, new AnonymousUser(settings), tokenService, apiKeyService);
     }
@@ -1389,9 +1396,10 @@ public class AuthenticationServiceTests extends ESTestCase {
     static class TestRealms extends Realms {
 
         TestRealms(Settings settings, Environment env, Map<String, Factory> factories, XPackLicenseState licenseState,
-                   ThreadContext threadContext, ReservedRealm reservedRealm, List<Realm> realms, List<Realm> internalRealms)
+                   ThreadContext threadContext, ReservedRealm reservedRealm, List<Realm> realms, List<Realm> internalRealms,
+                   ResourceWatcherService resourceWatcherService, SSLService sslService)
                 throws Exception {
-            super(settings, env, factories, licenseState, threadContext, reservedRealm);
+            super(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
             this.realms = realms;
             this.standardRealmsOnly = internalRealms;
         }
