@@ -6,6 +6,7 @@
 package org.elasticsearch.xpack.core.security.authc;
 
 import org.elasticsearch.common.collect.Tuple;
+import org.elasticsearch.common.settings.AbstractScopedSettings;
 import org.elasticsearch.common.settings.SecureSetting;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Setting;
@@ -13,6 +14,8 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -100,7 +103,7 @@ public class RealmSettings {
     }
 
     public static Settings filterRealmSettings(Settings globalSettings) {
-        return globalSettings.filter(key -> key.startsWith(RealmSettings.PREFIX) == false);
+        return globalSettings.filter(key -> key.startsWith(RealmSettings.PREFIX));
     }
 
     /**
@@ -139,6 +142,11 @@ public class RealmSettings {
 
     public static List<Setting.AffixSetting<?>> getStandardSettings(String realmType) {
         return Arrays.asList(ENABLED_SETTING.apply(realmType), ORDER_SETTING.apply(realmType));
+    }
+
+    public static Settings diff(Settings thisSettings, Settings thatSettings){
+        // implement this maybe? :)
+        return thisSettings;
     }
 
     private RealmSettings() {

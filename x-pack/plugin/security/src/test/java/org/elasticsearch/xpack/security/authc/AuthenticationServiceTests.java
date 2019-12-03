@@ -1399,7 +1399,7 @@ public class AuthenticationServiceTests extends ESTestCase {
                    ThreadContext threadContext, ReservedRealm reservedRealm, List<Realm> realms, List<Realm> internalRealms,
                    ResourceWatcherService resourceWatcherService, SSLService sslService)
                 throws Exception {
-            super(settings, env, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
+            super(env, settings, Settings.EMPTY, factories, licenseState, threadContext, reservedRealm, resourceWatcherService, sslService);
             this.realms = realms;
             this.standardRealmsOnly = internalRealms;
         }

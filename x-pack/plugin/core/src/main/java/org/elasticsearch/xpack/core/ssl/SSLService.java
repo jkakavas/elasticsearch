@@ -748,7 +748,7 @@ public class SSLService {
      * @return A map of Settings prefix to Settings object
      */
     private static Map<String, Settings> getRealmsSSLSettings(Settings settings, Environment env) {
-        final Settings mergedSettings = Settings.builder().put(settings).put(gatherRealmSettings(env).build()).build();
+        final Settings mergedSettings = Settings.builder().put(settings).put(gatherRealmSettings(env)).build();
         final Map<String, Settings> sslSettings = new HashMap<>();
         final String prefix = "xpack.security.authc.realms.";
         final Map<String, Settings> settingsByRealmType = mergedSettings.getGroups(prefix);
@@ -782,19 +782,16 @@ public class SSLService {
         }
     }
 
-    private static Settings.Builder gatherRealmSettings(Environment env) {
-        try (Stream<Path> walk = Files.walk(Paths.get(env.configFile().toUri()))) {
-            Settings.Builder realmSettingsBuilder = Settings.builder();
-            List<Path> realmConfigFiles = walk
-                .filter(Files::isRegularFile)
-                .filter(fileName -> fileName.toString().endsWith("_realm.yml")).collect(Collectors.toList());
-            for (Path configFile : realmConfigFiles) {
-                realmSettingsBuilder.put(Settings.builder().loadFromPath(configFile).build());
+    private static Settings gatherRealmSettings(Environment env) {
+        final Path realmConfigurationFile = env.configFile().resolve("realms.yml");
+        if (Files.exists(realmConfigurationFile)) {
+            try {
+                return RealmSettings.filterRealmSettings(Settings.builder().loadFromPath(realmConfigurationFile).build());
+            } catch (IOException e) {
+                throw new IllegalStateException("Unable to load realm configuration from realms.yml");
             }
-            return realmSettingsBuilder;
-        } catch (Exception e) {
-            throw new IllegalStateException("d");
         }
+        return Settings.EMPTY;
     }
 
     private static Map<String, Settings> getTransportProfileSSLSettings(Settings settings) {

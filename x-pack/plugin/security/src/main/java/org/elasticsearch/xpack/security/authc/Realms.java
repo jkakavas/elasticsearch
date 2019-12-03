@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -62,6 +63,7 @@ public class Realms implements Iterable<Realm> {
     private final ThreadContext threadContext;
     private final ReservedRealm reservedRealm;
     private final SSLService sslService;
+    private final Settings realmSettings;
 
     protected List<Realm> realms;
     // a list of realms that are considered standard in that they are provided by x-pack and
@@ -70,10 +72,12 @@ public class Realms implements Iterable<Realm> {
     // a list of realms that are considered native, that is they only interact with x-pack and no 3rd party auth sources
     List<Realm> nativeRealmsOnly;
 
-    public Realms(Settings settings, Environment env, Map<String, Realm.Factory> factories, XPackLicenseState licenseState,
+    public Realms(Environment env, Settings settings, Settings realmSettings, Map<String, Realm.Factory> factories,
+                  XPackLicenseState licenseState,
                   ThreadContext threadContext, ReservedRealm reservedRealm, ResourceWatcherService resourceWatcherService,
                   SSLService sslService) throws Exception {
         this.settings = settings;
+        this.realmSettings = realmSettings;
         this.env = env;
         this.factories = factories;
         this.licenseState = licenseState;
@@ -109,7 +113,8 @@ public class Realms implements Iterable<Realm> {
 
         this.standardRealmsOnly = Collections.unmodifiableList(standardRealms);
         this.nativeRealmsOnly = Collections.unmodifiableList(nativeRealms);
-        FileWatcher watcher = new FileWatcher(env.configFile());
+        // We will probably replace file watcher with an explicit reload API
+        FileWatcher watcher = new FileWatcher(env.configFile().resolve("realms.yml"));
         watcher.addListener(new FileListener(logger));
         try {
             resourceWatcherService.add(watcher, ResourceWatcherService.Frequency.HIGH);
@@ -258,35 +263,37 @@ public class Realms implements Iterable<Realm> {
         return realms;
     }
 
-    public void possiblyReplaceRealmSettings(Path realmSettingsFile) throws Exception{
-        Settings newRealmSettings = Settings.builder().loadFromPath(realmSettingsFile).build();
+    public void possiblyReloadRealmSettings(Path realmSettingsFile) throws Exception{
+        Settings newRealmSettings = RealmSettings.diff(Settings.builder().loadFromPath(realmSettingsFile).build(), realmSettings);
+        List<RealmConfig.RealmIdentifier> changedRealms =
+            new ArrayList<>(RealmSettings.getRealmSettings(newRealmSettings).keySet());
+        Settings mergedSettings =
+            Settings.builder().put(settings).put(RealmSettings.filterRealmSettings(newRealmSettings)).build();
         Map<RealmConfig.RealmIdentifier, Settings> newRealmSettingsMap =
-            RealmSettings.getRealmSettings(Settings.builder().loadFromPath(realmSettingsFile).build());
+            RealmSettings.getRealmSettings(mergedSettings);
         for (Entry<RealmConfig.RealmIdentifier, Settings> realmAndSettings: newRealmSettingsMap.entrySet()) {
             RealmConfig.RealmIdentifier identifier = realmAndSettings.getKey();
-            Settings mergedSettings =
-                Settings.builder().put(RealmSettings.filterRealmSettings(settings)).put(newRealmSettings).build();
-            sslService.addOrReplaceRealmSSLSettings(identifier, newRealmSettings);
-            logger.info(realmAndSettings.getValue());
-            logger.info(mergedSettings);
-            Realm.Factory factory = factories.get(identifier.getType());
-            RealmConfig config = new RealmConfig(identifier, mergedSettings, env, threadContext);
-            Realm newRealm = factory.create(config);
-            if (this.realms.stream().anyMatch(r -> r.name().equals(newRealm.name()) && r.type().equals(newRealm.type()))) {
-                this.realms.replaceAll(oldRealm -> {
-                    if (oldRealm.name().equals(identifier.getName())) {
-                        if (oldRealm.getClass() == newRealm.getClass()) {
-                            return newRealm;
+            if (changedRealms.contains(identifier)) {
+                sslService.addOrReplaceRealmSSLSettings(identifier, newRealmSettings);
+                Realm.Factory factory = factories.get(identifier.getType());
+                RealmConfig config = new RealmConfig(identifier, mergedSettings, env, threadContext);
+                Realm newRealm = factory.create(config);
+                if (this.realms.stream().anyMatch(r -> r.name().equals(newRealm.name()) && r.type().equals(newRealm.type()))) {
+                    this.realms.replaceAll(oldRealm -> {
+                        if (oldRealm.name().equals(identifier.getName())) {
+                            if (oldRealm.getClass() == newRealm.getClass()) {
+                                return newRealm;
+                            } else {
+                                throw new IllegalArgumentException("Cannot replace realm [" + identifier.getName() + "] with a different realm type ([" +
+                                    oldRealm.getClass().getSimpleName() + "] vs [" + newRealm.getClass().getSimpleName() + "])");
+                            }
                         } else {
-                            throw new IllegalArgumentException("Cannot replace realm [" + identifier.getName() + "] with a different realm type ([" +
-                                oldRealm.getClass().getSimpleName() + "] vs [" + newRealm.getClass().getSimpleName() + "])");
+                            return oldRealm;
                         }
-                    } else {
-                        return oldRealm;
-                    }
-                });
-            } else {
-                this.realms.add(newRealm);
+                    });
+                } else {
+                    this.realms.add(newRealm);
+                }
             }
         }
         Collections.sort(realms);
@@ -417,20 +424,16 @@ public class Realms implements Iterable<Realm> {
 
         @Override
         public void onFileCreated(Path file) {
-            if (file.toString().endsWith("_realm.yml")) {
-                try {
-                    possiblyReplaceRealmSettings(file);
-                } catch (Exception e) {
-                    logger.error(new ParameterizedMessage("Error loading realm from {} ", file, e));
-                }
+            try {
+                possiblyReloadRealmSettings(file);
+            } catch (Exception e) {
+                logger.error(new ParameterizedMessage("Error loading realm from {} ", file, e));
             }
         }
 
         @Override
         public void onFileDeleted(Path file) {
-            if (file.toString().endsWith("_realm.yml")) {
-                //TBD
-            }
+           // TBD
         }
 
         @Override
