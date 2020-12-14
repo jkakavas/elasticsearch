@@ -18,7 +18,7 @@ import java.util.Map;
  * Simple http response with status and response body as key value map. To be
  * used with {@link CommandLineHttpClient}.
  */
-final class HttpResponse {
+public final class HttpResponse {
     private final int httpStatus;
     private final Map<String, Object> responseBody;
 
@@ -29,15 +29,15 @@ final class HttpResponse {
         this.responseBody = Collections.unmodifiableMap(response);
     }
 
-    int getHttpStatus() {
+    public int getHttpStatus() {
         return httpStatus;
     }
 
-    Map<String, Object> getResponseBody() {
+    public Map<String, Object> getResponseBody() {
         return responseBody;
     }
 
-    static class HttpResponseBuilder {
+    public static class HttpResponseBuilder {
         private int httpStatus;
         private Map<String, Object> responseBody;
 
@@ -46,7 +46,7 @@ final class HttpResponse {
             return this;
         }
 
-        HttpResponseBuilder withResponseBody(final String responseJson)
+        public HttpResponseBuilder withResponseBody(final String responseJson)
                 throws ElasticsearchParseException, UnsupportedEncodingException {
             if (responseJson == null || responseJson.trim().isEmpty()) {
                 throw new ElasticsearchParseException(
