@@ -6,10 +6,10 @@
 package org.elasticsearch.xpack.security.cli;
 
 import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 import org.bouncycastle.asn1.DERIA5String;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
-import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.elasticsearch.cli.EnvironmentAwareCommand;
 import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.LoggingAwareMultiCommand;
@@ -30,9 +30,12 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.xpack.core.ssl.CertParsingUtils;
 
 import javax.security.auth.x500.X500Principal;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -46,6 +49,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
+import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -61,7 +65,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.zip.ZipOutputStream;
+
+import static org.elasticsearch.xpack.core.ssl.CertParsingUtils.readKeyPairsFromKeystore;
 
 public class EsWrapper extends LoggingAwareMultiCommand {
 
@@ -191,15 +196,108 @@ public class EsWrapper extends LoggingAwareMultiCommand {
 
     final class ClusterJoinCommand extends EnvironmentAwareCommand {
 
+        final OptionSpec<String> magicString;
+
         ClusterJoinCommand() {
             super("description");
+            magicString = parser.accepts("magic", "the magic string").withRequiredArg();
         }
 
         @Override
         protected void execute(Terminal terminal, OptionSet options, Environment env) throws Exception {
+            final String magic = new String(Base64.getUrlDecoder().decode(magicString.value(options)), StandardCharsets.UTF_8);
+            String[] parts = magic.split("\\$");
+            if (parts.length != 5){
+                throw new UserException(ExitCodes.DATA_ERROR, "Invalid magic string");
+            }
+            final SecureString apiKey = new SecureString(parts[0].toCharArray());
+            final String hostname = parts[1];
+            final String finerprint = parts[4];
+            FingerprintTrustingHttpsClient httpsClient = new FingerprintTrustingHttpsClient(finerprint);
+            enrollToCluster(terminal, env, httpsClient, hostname, apiKey);
+        }
 
+        private void enrollToCluster(Terminal terminal, Environment env, FingerprintTrustingHttpsClient httpsClient, String hostname, SecureString apiKey)
+            throws Exception {
+            URL route = new URL("https://"+hostname+":9200/_security/enroll");
+            final HttpResponse httpResponse = httpsClient.execute("POST", route, apiKey, () -> null
+            , is -> responseBuilder(is, terminal));
+
+            if (httpResponse.getHttpStatus() != HttpURLConnection.HTTP_OK) {
+                terminal.errorPrintln("");
+                terminal.errorPrintln(
+                    "Unexpected response code [" + httpResponse.getHttpStatus() + "] from calling POST " + route.toString()
+                );
+                throw new UserException(ExitCodes.TEMP_FAILURE, "Failed to enroll to cluster.");
+            }
+
+            Map<String, Object> resp = httpResponse.getResponseBody();
+
+            final KeyStore httpCa = deserialiseKeystore((String) resp.get("http_ca"));
+            final KeyStore transportCa = deserialiseKeystore((String) resp.get("transport_ca"));
+
+            Map<Certificate, Key> httpCaCertKey = CertParsingUtils.readKeyPairsFromKeystore(httpCa, password -> "password".toCharArray());
+            assert(httpCaCertKey.size() == 1);
+            Map.Entry<Certificate, Key> singleHttpEntry = httpCaCertKey.entrySet().iterator().next();
+            CAInfo httpCaInfo = new CAInfo((X509Certificate)singleHttpEntry.getKey(), (PrivateKey) singleHttpEntry.getValue());
+
+            Map<Certificate, Key> transportCaCertKey =
+                CertParsingUtils.readKeyPairsFromKeystore(transportCa, password ->  "password".toCharArray());
+            assert(transportCaCertKey.size() == 1);
+            Map.Entry<Certificate, Key> singleTransportEntry = transportCaCertKey.entrySet().iterator().next();
+            CAInfo transportCaInfo = new CAInfo((X509Certificate)singleTransportEntry.getKey(), (PrivateKey) singleTransportEntry.getValue());
+
+            final CertificateInformation http = new CertificateInformation(
+                new X500Principal("CN=" + getHostname()),
+                Collections.singletonList(getIpAddress()),
+                Collections.singletonList(getHostname()),
+                Collections.emptyList()
+            );
+
+            final CertificateInformation transport = new CertificateInformation(
+                new X500Principal("CN=" + getHostname()),
+                Collections.singletonList(getIpAddress()),
+                Collections.singletonList(getHostname()),
+                Collections.emptyList()
+            );
+
+            generateAndWriteSignedCertificates(
+                Paths.get(env.configFile().toString(), "http.p12").normalize(),
+                Collections.singletonList(http),
+                httpCaInfo
+            );
+            generateAndWriteSignedCertificates(
+                Paths.get(env.configFile().toString(), "transport.p12").normalize(),
+                Collections.singletonList(transport),
+                transportCaInfo
+            );
+
+            final Path configurationFile = Paths.get(env.configFile().toString(), "elasticsearch.yml").normalize();
+            Settings settings = Settings.builder()
+                // These will be defaulting to true vbut for now, set them
+                .put("xpack.security.enabled", true)
+                .put("xpack.security.transport.ssl.enabled", true)
+                .put("xpack.security.http.ssl.enabled", true)
+                .put("xpack.security.transport.ssl.verification_mode", "certificate")
+                .put("xpack.security.transport.ssl.keystore.path", "transport.p12")
+                .put("xpack.security.transport.ssl.truststore.path", "transport.p12")
+                .put("xpack.security.http.ssl.keystore.path", "http.p12")
+                .put(env.settings())
+                .build();
+            updateConfiguration(configurationFile, settings);
+            Environment newEnv = new Environment(settings, env.configFile());
+            startElasticsearch(newEnv);
+            terminal.println("Successfully joined cluster");
+        }
+
+        private KeyStore deserialiseKeystore(String http_ca) throws Exception{
+            InputStream input = new ByteArrayInputStream(Base64.getUrlDecoder().decode(http_ca));
+            KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            keyStore.load(input, "password".toCharArray());
+            return keyStore;
         }
     }
+
 
     final class ClusterInitCommand extends EnvironmentAwareCommand {
 
@@ -218,6 +316,15 @@ public class EsWrapper extends LoggingAwareMultiCommand {
                 Collections.emptyList()
             );
             final CAInfo httpCa = generateCA();
+            fullyWriteFile(
+                Paths.get(env.configFile().toAbsolutePath().toString(), "httpCa.p12"),
+                outputStream -> writePkcs12(
+                    outputStream,
+                    Map.of("httpca", httpCa.certAndKey),
+                    null,
+                    httpCa.password
+                )
+            );
 
             final CertificateInformation transport = new CertificateInformation(
                 new X500Principal("CN=" + getHostname()),
@@ -226,6 +333,15 @@ public class EsWrapper extends LoggingAwareMultiCommand {
                 Collections.emptyList()
             );
             final CAInfo transportCa = generateCA();
+            fullyWriteFile(
+                Paths.get(env.configFile().toAbsolutePath().toString(), "transportCa.p12"),
+                outputStream -> writePkcs12(
+                    outputStream,
+                    Map.of("transportca", transportCa.certAndKey),
+                    null,
+                    transportCa.password
+                )
+            );
 
             generateAndWriteSignedCertificates(
                 Paths.get(env.configFile().toString(), "http.p12").normalize(),
@@ -239,6 +355,7 @@ public class EsWrapper extends LoggingAwareMultiCommand {
             );
             final Path configurationFile = Paths.get(env.configFile().toString(), "elasticsearch.yml").normalize();
             Settings settings = Settings.builder()
+                // These will be defaulting to true vbut for now, set them
                 .put("xpack.security.enabled", true)
                 .put("xpack.security.transport.ssl.enabled", true)
                 .put("xpack.security.http.ssl.enabled", true)
@@ -384,43 +501,6 @@ public class EsWrapper extends LoggingAwareMultiCommand {
             }
         }
 
-        private HttpResponse.HttpResponseBuilder responseBuilder(InputStream is, Terminal terminal) throws IOException {
-            HttpResponse.HttpResponseBuilder httpResponseBuilder = new HttpResponse.HttpResponseBuilder();
-            if (is != null) {
-                byte[] bytes = toByteArray(is);
-                String responseBody = new String(bytes, StandardCharsets.UTF_8);
-                terminal.println(Terminal.Verbosity.VERBOSE, responseBody);
-                httpResponseBuilder.withResponseBody(responseBody);
-            } else {
-                terminal.println(Terminal.Verbosity.VERBOSE, "<Empty response>");
-            }
-            return httpResponseBuilder;
-        }
-
-        private byte[] toByteArray(InputStream is) throws IOException {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] internalBuffer = new byte[1024];
-            int read = is.read(internalBuffer);
-            while (read != -1) {
-                baos.write(internalBuffer, 0, read);
-                read = is.read(internalBuffer);
-            }
-            return baos.toByteArray();
-        }
-
-        private String getHostname() throws Exception {
-            return InetAddress.getLocalHost().getCanonicalHostName();
-        }
-
-        private String getIpAddress() {
-            // Resolve multiple interface addresses and add them all?
-            return InetAddress.getLoopbackAddress().getHostAddress();
-        }
-
-        private int getTransportPort() {
-            // Get this from node info API or the settings?
-            return 9300;
-        }
 
         private CAInfo generateCA() throws Exception {
             X500Principal x500Principal = new X500Principal(AUTO_GEN_CA_DN);
@@ -439,96 +519,141 @@ public class EsWrapper extends LoggingAwareMultiCommand {
             return new SecureString(characters);
         }
 
-        void updateConfiguration(Path configFile, Settings settings) throws Exception {
-            XContentBuilder yaml = XContentFactory.yamlBuilder();
-            yaml.startObject();
-            settings.toXContent(yaml, ToXContent.EMPTY_PARAMS);
-            yaml.endObject();
-            appendConfigToFile(configFile, Strings.toString(yaml));
-        }
 
-        void generateAndWriteSignedCertificates(Path output, Collection<CertificateInformation> certs, CAInfo caInfo) throws Exception {
-            assert certs.size() == 1;
-            CertificateInformation certificateInformation = certs.iterator().next();
-            CertificateAndKey pair = generateCertificateAndKey(certificateInformation, caInfo, 2048, 730);
-            fullyWriteFile(
-                output,
-                stream -> writePkcs12(stream, certificateInformation.name.toString(), pair, caInfo.certAndKey.cert, new char[0])
-            );
-        }
 
-        void writePkcs12(OutputStream output, String alias, CertificateAndKey pair, X509Certificate caCert, char[] password)
-            throws Exception {
-            writePkcs12(output, Map.of(alias, pair), caCert, password);
-        }
 
-        void writePkcs12(OutputStream output, Map<String, CertificateAndKey> aliasKeyCert, X509Certificate caCert, char[] password)
-            throws Exception {
-            final KeyStore pkcs12 = KeyStore.getInstance("PKCS12");
-            pkcs12.load(null);
-            for (Map.Entry<String, CertificateAndKey> entry : aliasKeyCert.entrySet()) {
-                pkcs12.setKeyEntry(entry.getKey(), entry.getValue().key, password, new Certificate[] { entry.getValue().cert });
+    }
+
+    HttpResponse.HttpResponseBuilder responseBuilder(InputStream is, Terminal terminal) throws IOException {
+        HttpResponse.HttpResponseBuilder httpResponseBuilder = new HttpResponse.HttpResponseBuilder();
+        if (is != null) {
+            byte[] bytes = toByteArray(is);
+            String responseBody = new String(bytes, StandardCharsets.UTF_8);
+            terminal.println(Terminal.Verbosity.VERBOSE, responseBody);
+            httpResponseBuilder.withResponseBody(responseBody);
+        } else {
+            terminal.println(Terminal.Verbosity.VERBOSE, "<Empty response>");
+        }
+        return httpResponseBuilder;
+    }
+
+
+    byte[] toByteArray(InputStream is) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] internalBuffer = new byte[1024];
+        int read = is.read(internalBuffer);
+        while (read != -1) {
+            baos.write(internalBuffer, 0, read);
+            read = is.read(internalBuffer);
+        }
+        return baos.toByteArray();
+    }
+
+    void generateAndWriteSignedCertificates(Path output, Collection<CertificateInformation> certs, CAInfo caInfo) throws Exception {
+        assert certs.size() == 1;
+        CertificateInformation certificateInformation = certs.iterator().next();
+        CertificateAndKey pair = generateCertificateAndKey(certificateInformation, caInfo, 2048, 730);
+        fullyWriteFile(
+            output,
+            stream -> writePkcs12(stream, certificateInformation.name.toString(), pair, caInfo.certAndKey.cert, new char[0])
+        );
+    }
+
+    void writePkcs12(OutputStream output, String alias, CertificateAndKey pair, X509Certificate caCert, char[] password)
+        throws Exception {
+        writePkcs12(output, Map.of(alias, pair), caCert, password);
+    }
+
+    void writePkcs12(OutputStream output, Map<String, CertificateAndKey> aliasKeyCert, X509Certificate caCert, char[] password)
+        throws Exception {
+        final KeyStore pkcs12 = KeyStore.getInstance("PKCS12");
+        pkcs12.load(null);
+        for (Map.Entry<String, CertificateAndKey> entry : aliasKeyCert.entrySet()) {
+            pkcs12.setKeyEntry(entry.getKey(), entry.getValue().key, password, new Certificate[] { entry.getValue().cert });
+        }
+        if (caCert != null) {
+            pkcs12.setCertificateEntry("ca", caCert);
+        }
+        pkcs12.store(output, password);
+    }
+
+    void fullyWriteFile(Path file, CheckedConsumer<OutputStream, Exception> writer) throws Exception {
+        assert file != null;
+        assert writer != null;
+
+        boolean success = false;
+        if (Files.exists(file)) {
+            throw new UserException(ExitCodes.IO_ERROR, "Output file '" + file + "' already exists");
+        }
+        try (OutputStream outputStream = Files.newOutputStream(file, StandardOpenOption.CREATE_NEW)) {
+            writer.accept(outputStream);
+
+            // set permissions to 600
+            PosixFileAttributeView view = Files.getFileAttributeView(file, PosixFileAttributeView.class);
+            if (view != null) {
+                view.setPermissions(Sets.newHashSet(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
             }
-            if (caCert != null) {
-                pkcs12.setCertificateEntry("ca", caCert);
+
+            success = true;
+        } finally {
+            if (success == false) {
+                Files.deleteIfExists(file);
             }
-            pkcs12.store(output, password);
-        }
-
-        void fullyWriteFile(Path file, CheckedConsumer<OutputStream, Exception> writer) throws Exception {
-            assert file != null;
-            assert writer != null;
-
-            boolean success = false;
-            if (Files.exists(file)) {
-                throw new UserException(ExitCodes.IO_ERROR, "Output file '" + file + "' already exists");
-            }
-            try (OutputStream outputStream = Files.newOutputStream(file, StandardOpenOption.CREATE_NEW)) {
-                writer.accept(outputStream);
-
-                // set permissions to 600
-                PosixFileAttributeView view = Files.getFileAttributeView(file, PosixFileAttributeView.class);
-                if (view != null) {
-                    view.setPermissions(Sets.newHashSet(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
-                }
-
-                success = true;
-            } finally {
-                if (success == false) {
-                    Files.deleteIfExists(file);
-                }
-            }
-        }
-
-        void appendConfigToFile(Path file, String config) throws Exception {
-            assert file != null;
-
-            if (Files.exists(file) == false) {
-                throw new UserException(ExitCodes.IO_ERROR, "Output file '" + file + "' does not exist");
-            }
-            Files.write(file, config.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
-        }
-
-        private CertificateAndKey generateCertificateAndKey(
-            CertificateInformation certificateInformation,
-            CAInfo caInfo,
-            int keySize,
-            int days
-        ) throws Exception {
-            KeyPair keyPair = CertGenUtils.generateKeyPair(keySize);
-            Certificate certificate = CertGenUtils.generateSignedCertificate(
-                certificateInformation.name,
-                getSubjectAlternativeNamesValue(
-                    certificateInformation.ipAddresses,
-                    certificateInformation.dnsNames,
-                    certificateInformation.commonNames
-                ),
-                keyPair,
-                caInfo.certAndKey.cert,
-                caInfo.certAndKey.key,
-                days
-            );
-            return new CertificateAndKey((X509Certificate) certificate, keyPair.getPrivate());
         }
     }
+
+    void appendConfigToFile(Path file, String config) throws Exception {
+        assert file != null;
+
+        if (Files.exists(file) == false) {
+            throw new UserException(ExitCodes.IO_ERROR, "Output file '" + file + "' does not exist");
+        }
+        Files.write(file, config.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
+    }
+
+    private CertificateAndKey generateCertificateAndKey(
+        CertificateInformation certificateInformation,
+        CAInfo caInfo,
+        int keySize,
+        int days
+    ) throws Exception {
+        KeyPair keyPair = CertGenUtils.generateKeyPair(keySize);
+        Certificate certificate = CertGenUtils.generateSignedCertificate(
+            certificateInformation.name,
+            getSubjectAlternativeNamesValue(
+                certificateInformation.ipAddresses,
+                certificateInformation.dnsNames,
+                certificateInformation.commonNames
+            ),
+            keyPair,
+            caInfo.certAndKey.cert,
+            caInfo.certAndKey.key,
+            days
+        );
+        return new CertificateAndKey((X509Certificate) certificate, keyPair.getPrivate());
+    }
+
+
+    private String getHostname() throws Exception {
+        return InetAddress.getLocalHost().getCanonicalHostName();
+    }
+
+    private String getIpAddress() {
+        // Resolve multiple interface addresses and add them all?
+        return InetAddress.getLoopbackAddress().getHostAddress();
+    }
+
+    private int getTransportPort() {
+        // Get this from node info API or the settings?
+        return 9300;
+    }
+
+    void updateConfiguration(Path configFile, Settings settings) throws Exception {
+        XContentBuilder yaml = XContentFactory.yamlBuilder();
+        yaml.startObject();
+        settings.toXContent(yaml, ToXContent.EMPTY_PARAMS);
+        yaml.endObject();
+        appendConfigToFile(configFile, Strings.toString(yaml));
+    }
+
 }

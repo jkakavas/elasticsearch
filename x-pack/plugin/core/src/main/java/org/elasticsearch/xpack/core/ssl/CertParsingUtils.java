@@ -132,7 +132,7 @@ public class CertParsingUtils {
         return readKeyPairsFromKeystore(store, keyPassword);
     }
 
-    static Map<Certificate, Key> readKeyPairsFromKeystore(KeyStore store, Function<String, char[]> keyPassword)
+    public static Map<Certificate, Key> readKeyPairsFromKeystore(KeyStore store, Function<String, char[]> keyPassword)
         throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException {
         final Enumeration<String> enumeration = store.aliases();
         final Map<Certificate, Key> map = new HashMap<>(store.size());
