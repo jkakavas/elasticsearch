@@ -266,6 +266,7 @@ import org.elasticsearch.xpack.security.support.CacheInvalidatorRegistry;
 import org.elasticsearch.xpack.security.support.ExtensionComponents;
 import org.elasticsearch.xpack.security.support.SecurityIndexManager;
 import org.elasticsearch.xpack.security.support.SecurityStatusChangeListener;
+import org.elasticsearch.xpack.security.transport.DualStackCoordinator;
 import org.elasticsearch.xpack.security.transport.SecurityHttpSettings;
 import org.elasticsearch.xpack.security.transport.SecurityServerTransportInterceptor;
 import org.elasticsearch.xpack.security.transport.filter.IPFilter;
@@ -1052,9 +1053,10 @@ public class Security extends Plugin implements SystemIndexPlugin, IngestPlugin,
         }
 
         Map<String, Supplier<HttpServerTransport>> httpTransports = new HashMap<>();
+        DualStackCoordinator coordinator = new DualStackCoordinator(clusterSettings);
         httpTransports.put(SecurityField.NAME4, () -> new SecurityNetty4HttpServerTransport(settings, networkService, bigArrays,
             ipFilter.get(), getSslService(), threadPool, xContentRegistry, dispatcher, clusterSettings,
-            getNettySharedGroupFactory(settings)));
+            getNettySharedGroupFactory(settings), coordinator));
         httpTransports.put(SecurityField.NIO, () -> new SecurityNioHttpServerTransport(settings, networkService, bigArrays,
             pageCacheRecycler, threadPool, xContentRegistry, dispatcher, ipFilter.get(), getSslService(), getNioGroupFactory(settings),
             clusterSettings));

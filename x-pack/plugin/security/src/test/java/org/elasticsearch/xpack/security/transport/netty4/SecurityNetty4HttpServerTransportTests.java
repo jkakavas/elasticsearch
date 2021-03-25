@@ -23,6 +23,7 @@ import org.elasticsearch.transport.SharedGroupFactory;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.ssl.SSLClientAuth;
 import org.elasticsearch.xpack.core.ssl.SSLService;
+import org.elasticsearch.xpack.security.transport.DualStackCoordinator;
 import org.elasticsearch.xpack.security.transport.filter.IPFilter;
 import org.junit.Before;
 
@@ -66,10 +67,13 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
                 .put(env.settings())
                 .put(XPackSettings.HTTP_SSL_ENABLED.getKey(), true).build();
         sslService = new SSLService(TestEnvironment.newEnvironment(settings));
+        final DualStackCoordinator coordinator =
+            new DualStackCoordinator(new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         SecurityNetty4HttpServerTransport transport = new SecurityNetty4HttpServerTransport(settings,
                 new NetworkService(Collections.emptyList()), mock(BigArrays.class), mock(IPFilter.class), sslService,
                 mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator);
         ChannelHandler handler = transport.configureServerChannelHandler();
         final EmbeddedChannel ch = new EmbeddedChannel(handler);
         assertThat(ch.pipeline().get(SslHandler.class).engine().getNeedClientAuth(), is(false));
@@ -83,10 +87,13 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
                 .put(XPackSettings.HTTP_SSL_ENABLED.getKey(), true)
                 .put("xpack.security.http.ssl.client_authentication", value).build();
         sslService = new SSLService(TestEnvironment.newEnvironment(settings));
+        final DualStackCoordinator coordinator =
+            new DualStackCoordinator(new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         SecurityNetty4HttpServerTransport transport = new SecurityNetty4HttpServerTransport(settings,
                 new NetworkService(Collections.emptyList()), mock(BigArrays.class), mock(IPFilter.class), sslService,
                 mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator);
         ChannelHandler handler = transport.configureServerChannelHandler();
         final EmbeddedChannel ch = new EmbeddedChannel(handler);
         assertThat(ch.pipeline().get(SslHandler.class).engine().getNeedClientAuth(), is(false));
@@ -100,10 +107,13 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
                 .put(XPackSettings.HTTP_SSL_ENABLED.getKey(), true)
                 .put("xpack.security.http.ssl.client_authentication", value).build();
         sslService = new SSLService(TestEnvironment.newEnvironment(settings));
+        final DualStackCoordinator coordinator =
+            new DualStackCoordinator(new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         SecurityNetty4HttpServerTransport transport = new SecurityNetty4HttpServerTransport(settings,
                 new NetworkService(Collections.emptyList()), mock(BigArrays.class), mock(IPFilter.class), sslService,
                 mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator);
         ChannelHandler handler = transport.configureServerChannelHandler();
         final EmbeddedChannel ch = new EmbeddedChannel(handler);
         assertThat(ch.pipeline().get(SslHandler.class).engine().getNeedClientAuth(), is(true));
@@ -117,10 +127,13 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
                 .put(XPackSettings.HTTP_SSL_ENABLED.getKey(), true)
                 .put("xpack.security.http.ssl.client_authentication", value).build();
         sslService = new SSLService(TestEnvironment.newEnvironment(settings));
+        final DualStackCoordinator coordinator =
+            new DualStackCoordinator(new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         SecurityNetty4HttpServerTransport transport = new SecurityNetty4HttpServerTransport(settings,
                 new NetworkService(Collections.emptyList()), mock(BigArrays.class), mock(IPFilter.class), sslService,
                 mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator);
         ChannelHandler handler = transport.configureServerChannelHandler();
         final EmbeddedChannel ch = new EmbeddedChannel(handler);
         assertThat(ch.pipeline().get(SslHandler.class).engine().getNeedClientAuth(), is(false));
@@ -132,10 +145,13 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
                 .put(env.settings())
                 .put(XPackSettings.HTTP_SSL_ENABLED.getKey(), true).build();
         sslService = new SSLService(TestEnvironment.newEnvironment(settings));
+        final DualStackCoordinator coordinator =
+            new DualStackCoordinator(new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         SecurityNetty4HttpServerTransport transport = new SecurityNetty4HttpServerTransport(settings,
                 new NetworkService(Collections.emptyList()), mock(BigArrays.class), mock(IPFilter.class), sslService,
                 mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator );
         ChannelHandler handler = transport.configureServerChannelHandler();
         EmbeddedChannel ch = new EmbeddedChannel(handler);
         SSLEngine defaultEngine = ch.pipeline().get(SslHandler.class).engine();
@@ -148,7 +164,8 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
         sslService = new SSLService(TestEnvironment.newEnvironment(settings));
         transport = new SecurityNetty4HttpServerTransport(settings, new NetworkService(Collections.emptyList()),
                 mock(BigArrays.class), mock(IPFilter.class), sslService, mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator);
         handler = transport.configureServerChannelHandler();
         ch = new EmbeddedChannel(handler);
         SSLEngine customEngine = ch.pipeline().get(SslHandler.class).engine();
@@ -168,10 +185,13 @@ public class SecurityNetty4HttpServerTransportTests extends ESTestCase {
             .build();
         env = TestEnvironment.newEnvironment(settings);
         sslService = new SSLService(env);
+        final DualStackCoordinator coordinator =
+            new DualStackCoordinator(new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         SecurityNetty4HttpServerTransport transport = new SecurityNetty4HttpServerTransport(settings,
                 new NetworkService(Collections.emptyList()), mock(BigArrays.class), mock(IPFilter.class), sslService,
                 mock(ThreadPool.class), xContentRegistry(), new NullDispatcher(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings));
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), new SharedGroupFactory(settings),
+            coordinator);
         assertNotNull(transport.configureServerChannelHandler());
     }
 }

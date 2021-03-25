@@ -22,6 +22,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.SharedGroupFactory;
 import org.elasticsearch.xpack.core.ssl.SSLConfiguration;
 import org.elasticsearch.xpack.core.ssl.SSLService;
+import org.elasticsearch.xpack.security.transport.DualStackCoordinator;
 import org.elasticsearch.xpack.security.transport.SecurityHttpExceptionHandler;
 import org.elasticsearch.xpack.security.transport.filter.IPFilter;
 
@@ -36,16 +37,18 @@ public class SecurityNetty4HttpServerTransport extends Netty4HttpServerTransport
     private final IPFilter ipFilter;
     private final SSLService sslService;
     private final SSLConfiguration sslConfiguration;
+    private final DualStackCoordinator coordinator;
 
     public SecurityNetty4HttpServerTransport(Settings settings, NetworkService networkService, BigArrays bigArrays, IPFilter ipFilter,
                                              SSLService sslService, ThreadPool threadPool, NamedXContentRegistry xContentRegistry,
                                              Dispatcher dispatcher, ClusterSettings clusterSettings,
-                                             SharedGroupFactory sharedGroupFactory) {
+                                             SharedGroupFactory sharedGroupFactory, DualStackCoordinator coordinator) {
         super(settings, networkService, bigArrays, threadPool, xContentRegistry, dispatcher, clusterSettings, sharedGroupFactory);
         this.securityExceptionHandler = new SecurityHttpExceptionHandler(logger, lifecycle, (c, e) -> super.onException(c, e));
         this.ipFilter = ipFilter;
         final boolean ssl = HTTP_SSL_ENABLED.get(settings);
         this.sslService = sslService;
+        this.coordinator = coordinator;
         if (ssl) {
             this.sslConfiguration = sslService.getHttpTransportSSLConfiguration();
             if (sslService.isConfigurationValidForServerUsage(sslConfiguration) == false) {
@@ -84,7 +87,8 @@ public class SecurityNetty4HttpServerTransport extends Netty4HttpServerTransport
             if (sslConfiguration != null) {
                 SSLEngine sslEngine = sslService.createSSLEngine(sslConfiguration, null, -1);
                 sslEngine.setUseClientMode(false);
-                ch.pipeline().addFirst("ssl", new SslHandler(sslEngine));
+                final DualStackHandler sslHandler = new DualStackHandler(sslEngine, coordinator);
+                ch.pipeline().addFirst(DualStackHandler.HANDLER_NAME, sslHandler);
             }
             ch.pipeline().addFirst("ip_filter", new IpFilterRemoteAddressFilter(ipFilter, IPFilter.HTTP_PROFILE_NAME));
         }

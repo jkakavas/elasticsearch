@@ -101,6 +101,8 @@ public class XPackSettings {
     public static final Setting<Boolean> FIPS_MODE_ENABLED =
         Setting.boolSetting("xpack.security.fips_mode.enabled", false, Property.NodeScope);
 
+    public static final Setting<Boolean> DUAL_STACK_HTTP_ENABLED = Setting.boolSetting("xpack.security.http.ssl.dual_stack.enabled", true, Property.NodeScope, Property.Dynamic);
+
     /*
      * SSL settings. These are the settings that are specifically registered for SSL. Many are private as we do not explicitly use them
      * but instead parse based on a prefix (eg *.ssl.*)
@@ -227,6 +229,7 @@ public class XPackSettings {
         settings.add(API_KEY_SERVICE_ENABLED_SETTING);
         settings.add(USER_SETTING);
         settings.add(PASSWORD_HASHING_ALGORITHM);
+        settings.add(DUAL_STACK_HTTP_ENABLED);
         return Collections.unmodifiableList(settings);
     }
 
