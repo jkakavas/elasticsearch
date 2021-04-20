@@ -556,7 +556,7 @@ public class XPackLicenseState {
      * based on the current license level.
      */
     public boolean isSecurityEnabled() {
-        return isSecurityEnabled(status.mode, isSecurityExplicitlyEnabled, isSecurityEnabled);
+        return isSecurityEnabled;
     }
 
     public static boolean isTransportTlsRequired(License license, Settings settings) {
@@ -576,17 +576,6 @@ public class XPackLicenseState {
                 return false;
             default:
                 throw new AssertionError("unknown operation mode [" + license.operationMode() + "]");
-        }
-    }
-
-    private static boolean isSecurityEnabled(final OperationMode mode, final boolean isSecurityExplicitlyEnabled,
-                                             final boolean isSecurityEnabled) {
-        switch (mode) {
-            case TRIAL:
-            case BASIC:
-                return isSecurityExplicitlyEnabled;
-            default:
-                return isSecurityEnabled;
         }
     }
 

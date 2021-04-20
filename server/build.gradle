@@ -27,6 +27,10 @@ dependencies {
   api project(':libs:elasticsearch-secure-sm')
   api project(':libs:elasticsearch-x-content')
   api project(":libs:elasticsearch-geo")
+  api project(':client:rest')
+  api "org.bouncycastle:bc-fips:1.0.2"
+  api "org.bouncycastle:bctls-fips:1.0.9"
+  api "org.bouncycastle:bcpkix-fips:1.0.5"
 
   implementation project(':libs:elasticsearch-plugin-classloader')
 
@@ -71,6 +75,13 @@ dependencies {
 
   api "co.elastic.logging:log4j2-ecs-layout:${versions.ecsLogging}"
   api "co.elastic.logging:ecs-logging-core:${versions.ecsLogging}"
+
+  api "org.apache.httpcomponents:httpclient:${versions.httpclient}"
+  api "org.apache.httpcomponents:httpcore:${versions.httpcore}"
+  api "org.apache.httpcomponents:httpasyncclient:${versions.httpasyncclient}"
+  api "org.apache.httpcomponents:httpcore-nio:${versions.httpcore}"
+  api "org.apache.httpcomponents:httpclient-cache:${versions.httpclient}"
+
 
   testImplementation(project(":test:framework")) {
     // tests use the locally compiled version of server

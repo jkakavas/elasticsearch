@@ -191,7 +191,7 @@ public abstract class NetworkUtils {
 
     /** Returns all addresses (any scope) for interfaces that are up.
      *  This is only used to pick a publish address, when the user set network.host to a wildcard */
-    static InetAddress[] getAllAddresses() throws IOException {
+    public static InetAddress[] getAllAddresses() throws IOException {
         return filterAllAddresses(address -> true, "no up-and-running addresses found");
     }
 

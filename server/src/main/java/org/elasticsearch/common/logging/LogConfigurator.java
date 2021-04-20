@@ -228,10 +228,9 @@ public class LogConfigurator {
 
         final String deprecatedLocationsString = String.join("\n  ", locationsWithDeprecatedPatterns);
         if (deprecatedLocationsString.length() > 0) {
-            LogManager.getLogger(LogConfigurator.class).warn("Some logging configurations have %marker but don't have %node_name. "
-                    + "We will automatically add %node_name to the pattern to ease the migration for users who customize "
-                    + "log4j2.properties but will stop this behavior in 7.0. You should manually replace `%node_name` with "
-                    + "`[%node_name]%marker ` in these locations:\n  {}", deprecatedLocationsString);
+            LogManager.getLogger(LogConfigurator.class).warn(
+                "Some logging configurations have %marker but don't have %node_name. " + "We will automatically add %node_name to the pattern to ease the migration for users who customize " + "log4j2.properties but will stop this behavior in 7.0. You should manually replace `%node_name` with " + "`[%node_name]%marker ` in these locations:\n  {}",
+                deprecatedLocationsString);
         }
 
         // Redirect stdout/stderr to log4j. While we ensure Elasticsearch code does not write to those streams,

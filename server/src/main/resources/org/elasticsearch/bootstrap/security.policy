@@ -53,6 +53,17 @@ grant codeBase "${codebase.jna}" {
   permission java.lang.RuntimePermission "accessDeclaredMembers";
 };
 
+grant codeBase "${codebase.elasticsearch-rest-client}" {
+  // rest client uses system properties which gets the default proxy
+  permission java.net.NetPermission "getProxySelector";
+};
+
+grant codeBase "${codebase.httpasyncclient}" {
+  // rest client uses system properties which gets the default proxy
+  permission java.net.NetPermission "getProxySelector";
+
+};
+
 //// Everything else:
 
 grant {
@@ -155,4 +166,7 @@ grant {
 
   // system memory on Linux systems affected by JDK bug (#66629)
   permission java.io.FilePermission "/proc/meminfo", "read";
+
+  permission java.net.SocketPermission "127.0.0.1:9200", "connect,resolve";
+  permission java.lang.RuntimePermission "setIO";
 };
