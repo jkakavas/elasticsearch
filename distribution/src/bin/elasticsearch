@@ -45,6 +45,21 @@ then
   fi
 fi
 
+AUTOCONF_SECURITY=true;
+if  [[ $AUTOCONF_SECURITY = true ]];then
+  ES_MAIN_CLASS=org.elasticsearch.xpack.security.cli.PreConfigureSecurity \
+    ES_ADDITIONAL_SOURCES="x-pack-env;x-pack-security-env" \
+    ES_ADDITIONAL_CLASSPATH_DIRECTORIES=lib/tools/security-cli \
+    "`dirname "$0"`"/elasticsearch-cli \
+    "$@"
+
+  ES_MAIN_CLASS=org.elasticsearch.xpack.security.cli.PostConfigureSecurity \
+    ES_ADDITIONAL_SOURCES="x-pack-env;x-pack-security-env" \
+    ES_ADDITIONAL_CLASSPATH_DIRECTORIES=lib/tools/security-cli \
+    "`dirname "$0"`"/elasticsearch-cli \
+    "$@" &
+
+fi
 # The JVM options parser produces the final JVM options to start Elasticsearch.
 # It does this by incorporating JVM options in the following way:
 #   - first, system JVM options are applied (these are hardcoded options in the
@@ -52,6 +67,7 @@ fi
 #   - second, JVM options are read from jvm.options and jvm.options.d/*.options
 #   - third, JVM options from ES_JAVA_OPTS are applied
 #   - fourth, ergonomic JVM options are applied
+
 ES_JAVA_OPTS=`export ES_TMPDIR; "$JAVA" "$XSHARE" -cp "$ES_CLASSPATH" org.elasticsearch.tools.launchers.JvmOptionsParser "$ES_PATH_CONF" "$ES_HOME/plugins"`
 
 # manual parsing to find out, if process should be detached
