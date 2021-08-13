@@ -43,6 +43,9 @@ import com.nimbusds.openid.connect.sdk.claims.AccessTokenHash;
 import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
 import com.nimbusds.openid.connect.sdk.validators.InvalidHashException;
 
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.PlainActionFuture;
@@ -53,8 +56,12 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.TestEnvironment;
+import org.elasticsearch.test.http.MockRequest;
+import org.elasticsearch.test.http.MockResponse;
+import org.elasticsearch.test.http.MockWebServer;
 import org.elasticsearch.xpack.core.security.authc.RealmConfig;
 import org.elasticsearch.xpack.core.ssl.SSLService;
+import org.elasticsearch.xpack.core.ssl.TestsSSLService;
 import org.junit.After;
 import org.junit.Before;
 import org.mockito.Mockito;
@@ -62,6 +69,7 @@ import org.mockito.Mockito;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -75,6 +83,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Future;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -82,6 +91,7 @@ import static java.time.Instant.now;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
@@ -131,6 +141,10 @@ public class OpenIdConnectAuthenticatorTests extends OpenIdConnectTestCase {
             rpConfig.getSignatureAlgorithm(), new Secret(rpConfig.getClientSecret().toString()));
         return new OpenIdConnectAuthenticator(config, opConfig, rpConfig, new SSLService(env), validator,
             null);
+    }
+
+    private OpenIdConnectAuthenticator buildAuthenticator(RealmConfig config) throws URISyntaxException {
+        return new OpenIdConnectAuthenticator(config, getOpConfig(), getDefaultRpConfig(), new SSLService(env), null);
     }
 
     public void testEmptyRedirectUrlIsRejected() throws Exception {
@@ -873,6 +887,40 @@ public class OpenIdConnectAuthenticatorTests extends OpenIdConnectTestCase {
         assertThat(e.getMessage(), containsString("Cannot merge [java.lang.Boolean] with [java.lang.String]"));
     }
 
+    public void testOutgoingConnectionsReuse() throws Exception {
+        final Path keyPath = getDataPath("/org/elasticsearch/xpack/security/authc/oidc/oidc-test-ssl-server.key");
+        final Path certPath = getDataPath("/org/elasticsearch/xpack/security/authc/oidc/oidc-test-ssl-server.crt");
+        final Settings globalSettings = Settings.builder().put("path.home", createTempDir())
+            .put("xpack.security.authc.realms.oidc.oidc-realm.ssl.verification_mode", "certificate")
+            .put("xpack.security.authc.realms.oidc.oidc-realm.ssl.certificate_authorities", certPath)
+            .put("xpack.security.http.ssl.enabled", true)
+            .put("xpack.security.http.ssl.key", keyPath)
+            .put("xpack.security.http.ssl.certificate", certPath)
+            .build();
+        env = TestEnvironment.newEnvironment(globalSettings);
+
+        try (MockWebServer webServer = new MockWebServer(new TestsSSLService(env).sslContext("xpack.security.http.ssl"), false)){
+            webServer.start();
+            webServer.enqueue(new MockResponse().setResponseCode(200).setBody("token_response"));
+            webServer.enqueue(new MockResponse().setResponseCode(200).setBody("token_response"));
+            authenticator = buildAuthenticator();
+            CloseableHttpAsyncClient client = authenticator.getHttpClient();
+
+            final HttpPost tokenRequest1 = new HttpPost("https://localhost:"+webServer.getPort()+"/token");
+            Future<HttpResponse> tokenFuture1 =  client.execute(tokenRequest1, null);
+            Future<HttpResponse> tokenFuture2 =  client.execute(tokenRequest1, null);
+            HttpResponse tokenResponse1 = tokenFuture1.get();
+            HttpResponse tokenResponse2 = tokenFuture2.get();
+            assertThat(webServer.requests(), hasSize(2));
+            for (MockRequest m : webServer.requests()) {
+                System.out.println(m.getRemoteAddress());
+            }
+            // TTL is by default -1, so we should be re-using the connections
+            assertThat(webServer.requests().get(0).getRemoteAddress(), equalTo(webServer.requests().get(1).getRemoteAddress()));
+            webServer.clearRequests();
+        }
+
+    }
     private OpenIdConnectProviderConfiguration getOpConfig() throws URISyntaxException {
         return new OpenIdConnectProviderConfiguration(
             new Issuer("https://op.example.com"),

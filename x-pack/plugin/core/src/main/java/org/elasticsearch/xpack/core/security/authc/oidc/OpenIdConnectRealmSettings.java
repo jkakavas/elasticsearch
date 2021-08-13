@@ -160,6 +160,12 @@ public class OpenIdConnectRealmSettings {
     public static final Setting.AffixSetting<Integer> HTTP_MAX_ENDPOINT_CONNECTIONS
         = Setting.affixKeySetting(RealmSettings.realmSettingPrefix(TYPE), "http.max_endpoint_connections",
         key -> Setting.intSetting(key, 200, Setting.Property.NodeScope));
+    public static final Setting.AffixSetting<TimeValue> HTTP_CONNECTION_POOL_TTL
+        = Setting.affixKeySetting(RealmSettings.realmSettingPrefix(TYPE), "http.connection_pool_ttl",
+        key -> Setting.timeSetting(key, TimeValue.MINUS_ONE, Setting.Property.NodeScope));
+    public static final Setting.AffixSetting<Boolean> TCP_KEEPALIVE = Setting.affixKeySetting(
+        RealmSettings.realmSettingPrefix(TYPE), "http.tcp.keep_alive",
+        key -> Setting.boolSetting(key, true, Setting.Property.NodeScope));
     public static final Setting.AffixSetting<String> HTTP_PROXY_HOST
         = Setting.affixKeySetting(RealmSettings.realmSettingPrefix(TYPE), "http.proxy.host",
         key -> Setting.simpleString(key, new Setting.Validator<String>() {
@@ -215,8 +221,8 @@ public class OpenIdConnectRealmSettings {
             RP_POST_LOGOUT_REDIRECT_URI, RP_CLIENT_AUTH_METHOD, RP_CLIENT_AUTH_JWT_SIGNATURE_ALGORITHM, OP_AUTHORIZATION_ENDPOINT,
             OP_TOKEN_ENDPOINT, OP_USERINFO_ENDPOINT, OP_ENDSESSION_ENDPOINT, OP_ISSUER, OP_JWKSET_PATH,
             POPULATE_USER_METADATA, HTTP_CONNECT_TIMEOUT, HTTP_CONNECTION_READ_TIMEOUT,
-            HTTP_SOCKET_TIMEOUT, HTTP_MAX_CONNECTIONS, HTTP_MAX_ENDPOINT_CONNECTIONS, HTTP_PROXY_HOST, HTTP_PROXY_PORT,
-            HTTP_PROXY_SCHEME, ALLOWED_CLOCK_SKEW);
+            HTTP_SOCKET_TIMEOUT, HTTP_MAX_CONNECTIONS, HTTP_MAX_ENDPOINT_CONNECTIONS, HTTP_CONNECTION_POOL_TTL, TCP_KEEPALIVE,
+            HTTP_PROXY_HOST, HTTP_PROXY_PORT, HTTP_PROXY_SCHEME, ALLOWED_CLOCK_SKEW);
         set.addAll(DelegatedAuthorizationSettings.getSettings(TYPE));
         set.addAll(RealmSettings.getStandardSettings(TYPE));
         set.addAll(SSLConfigurationSettings.getRealmSettings(TYPE));

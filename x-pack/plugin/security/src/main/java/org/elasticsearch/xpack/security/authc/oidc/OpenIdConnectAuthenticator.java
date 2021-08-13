@@ -65,6 +65,7 @@ import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.impl.nio.client.HttpAsyncClients;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
+import org.apache.http.impl.nio.reactor.IOReactorConfig;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.nio.conn.NoopIOSessionStrategy;
 import org.apache.http.nio.conn.SchemeIOSessionStrategy;
@@ -109,11 +110,13 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.ALLOWED_CLOCK_SKEW;
+import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_CONNECTION_POOL_TTL;
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_CONNECTION_READ_TIMEOUT;
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_CONNECT_TIMEOUT;
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_MAX_CONNECTIONS;
@@ -122,6 +125,7 @@ import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectReal
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_PROXY_PORT;
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_PROXY_SCHEME;
 import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.HTTP_SOCKET_TIMEOUT;
+import static org.elasticsearch.xpack.core.security.authc.oidc.OpenIdConnectRealmSettings.TCP_KEEPALIVE;
 
 /**
  * Handles an OpenID Connect Authentication response as received by the facilitator. In the case of an implicit flow, validates
@@ -161,6 +165,10 @@ public class OpenIdConnectAuthenticator {
         this.httpClient = createHttpClient();
         this.idTokenValidator.set(idTokenValidator);
         this.watcherService = watcherService;
+    }
+
+    CloseableHttpAsyncClient getHttpClient() {
+        return this.httpClient;
     }
 
     /**
@@ -590,7 +598,10 @@ public class OpenIdConnectAuthenticator {
             SpecialPermission.check();
             return AccessController.doPrivileged(
                 (PrivilegedExceptionAction<CloseableHttpAsyncClient>) () -> {
-                    ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
+                    final IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
+                        .setSoKeepAlive(realmConfig.getSetting(TCP_KEEPALIVE))
+                        .build();
+                    final ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor(ioReactorConfig);
                     final String sslKey = RealmSettings.realmSslPrefix(realmConfig.identifier());
                     final SSLConfiguration sslConfiguration = sslService.getSSLConfiguration(sslKey);
                     final SSLContext clientContext = sslService.sslContext(sslConfiguration);
@@ -599,13 +610,22 @@ public class OpenIdConnectAuthenticator {
                         .register("http", NoopIOSessionStrategy.INSTANCE)
                         .register("https", new SSLIOSessionStrategy(clientContext, verifier))
                         .build();
-                    PoolingNHttpClientConnectionManager connectionManager = new PoolingNHttpClientConnectionManager(ioReactor, registry);
+                    PoolingNHttpClientConnectionManager connectionManager = new PoolingNHttpClientConnectionManager(
+                        ioReactor,
+                        null,
+                        registry,
+                        null,
+                        null,
+                        realmConfig.getSetting(HTTP_CONNECTION_POOL_TTL).getMillis(),
+                        TimeUnit.MILLISECONDS
+                    );
                     connectionManager.setDefaultMaxPerRoute(realmConfig.getSetting(HTTP_MAX_ENDPOINT_CONNECTIONS));
                     connectionManager.setMaxTotal(realmConfig.getSetting(HTTP_MAX_CONNECTIONS));
                     final RequestConfig requestConfig = RequestConfig.custom()
                         .setConnectTimeout(Math.toIntExact(realmConfig.getSetting(HTTP_CONNECT_TIMEOUT).getMillis()))
                         .setConnectionRequestTimeout(Math.toIntExact(realmConfig.getSetting(HTTP_CONNECTION_READ_TIMEOUT).getSeconds()))
-                        .setSocketTimeout(Math.toIntExact(realmConfig.getSetting(HTTP_SOCKET_TIMEOUT).getMillis())).build();
+                        .setSocketTimeout(Math.toIntExact(realmConfig.getSetting(HTTP_SOCKET_TIMEOUT).getMillis()))
+                        .build();
                     HttpAsyncClientBuilder httpAsyncClientBuilder = HttpAsyncClients.custom()
                         .setConnectionManager(connectionManager)
                         .setDefaultRequestConfig(requestConfig);
