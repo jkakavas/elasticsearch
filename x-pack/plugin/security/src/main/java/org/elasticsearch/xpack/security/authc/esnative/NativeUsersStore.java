@@ -32,6 +32,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.core.Tuple;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.engine.DocumentMissingException;
 import org.elasticsearch.index.query.QueryBuilder;
@@ -646,26 +647,45 @@ public class NativeUsersStore {
 
     static final class ReservedUserInfo {
 
-        public final char[] passwordHash;
+        /**
+         * We support bootstrapping the elastic user password by configuring two settings in the node keystore, bootstrap.password
+         * and bootstrap.password_hash. ReservedUserInfo is aware of both and either one of these can be used to authenticate the
+         * elastic user, until its password is set in the security index
+         */
+        public Tuple<char[], char[]> passwordHashes;
         public final boolean enabled;
         private final Hasher hasher;
 
         ReservedUserInfo(char[] passwordHash, boolean enabled) {
-            this.passwordHash = passwordHash;
+            this.passwordHashes = new Tuple<>(passwordHash, new char[0]);
             this.enabled = enabled;
-            this.hasher = Hasher.resolveFromHash(this.passwordHash);
+            this.hasher = Hasher.resolveFromHash(passwordHash);
+        }
+
+        ReservedUserInfo(Tuple<char[], char[]> passwordHashes, boolean enabled){
+            this.passwordHashes = passwordHashes;
+            this.enabled = enabled;
+            final Hasher hasherA = Hasher.resolveFromHash(passwordHashes.v1());
+            final Hasher hasherB = Hasher.resolveFromHash(passwordHashes.v2());
+            if (hasherA.equals(Hasher.NOOP) == false && hasherB.equals(Hasher.NOOP) == false && hasherA.equals(hasherB) == false) {
+                throw new IllegalArgumentException("Password hashes are hashed with different algorithm");
+            }
+            this.hasher = hasherA.equals(Hasher.NOOP) == false ? hasherA : hasherB;
         }
 
         ReservedUserInfo deepClone() {
-            return new ReservedUserInfo(Arrays.copyOf(passwordHash, passwordHash.length), enabled);
+            return new ReservedUserInfo(new Tuple<>(
+                Arrays.copyOf(passwordHashes.v1(),passwordHashes.v1().length),
+                Arrays.copyOf(passwordHashes.v2(),passwordHashes.v2().length)
+            ), enabled);
         }
 
         boolean hasEmptyPassword() {
-            return passwordHash.length == 0;
+            return passwordHashes.v1().length == 0 && passwordHashes.v2().length == 0;
         }
 
         boolean verifyPassword(SecureString data) {
-            return hasher.verify(data, this.passwordHash);
+            return hasher.verify(data, this.passwordHashes.v1()) ||  hasher.verify(data, this.passwordHashes.v2());
         }
 
         static ReservedUserInfo defaultEnabledUserInfo() {

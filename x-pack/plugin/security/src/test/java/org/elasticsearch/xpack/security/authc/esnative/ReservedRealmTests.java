@@ -353,6 +353,29 @@ public class ReservedRealmTests extends ESTestCase {
         assertThat(result.getStatus(), is(AuthenticationResult.Status.SUCCESS));
     }
 
+    public void testBootstrapElasticPasswordHashWorksOnceSecurityIndexExists() throws Exception {
+        final SecureString password = new SecureString(randomAlphaOfLengthBetween(14, 18).toCharArray());
+        final Hasher hasher = Hasher.resolve(XPackSettings.PASSWORD_HASHING_ALGORITHM.get(Settings.EMPTY));
+        final char[] passwordHash = hasher.hash(password);
+        MockSecureSettings mockSecureSettings = new MockSecureSettings();
+        mockSecureSettings.setString("bootstrap.password_hash", new String(passwordHash));
+        Settings settings = Settings.builder().setSecureSettings(mockSecureSettings).build();
+        when(securityIndex.indexExists()).thenReturn(true);
+
+        final ReservedRealm reservedRealm = new ReservedRealm(mock(Environment.class), settings, usersStore,
+            new AnonymousUser(Settings.EMPTY), securityIndex, threadPool);
+        PlainActionFuture<AuthenticationResult> listener = new PlainActionFuture<>();
+
+        doAnswer((i) -> {
+            ActionListener callback = (ActionListener) i.getArguments()[1];
+            callback.onResponse(null);
+            return null;
+        }).when(usersStore).getReservedUserInfo(eq("elastic"), any(ActionListener.class));
+        reservedRealm.doAuthenticate(new UsernamePasswordToken(new ElasticUser(true).principal(), password), listener);
+        final AuthenticationResult result = listener.get();
+        assertThat(result.getStatus(), is(AuthenticationResult.Status.SUCCESS));
+    }
+
     public void testBootstrapElasticPasswordFailsOnceElasticUserExists() throws Exception {
         MockSecureSettings mockSecureSettings = new MockSecureSettings();
         mockSecureSettings.setString("bootstrap.password", "foobar");

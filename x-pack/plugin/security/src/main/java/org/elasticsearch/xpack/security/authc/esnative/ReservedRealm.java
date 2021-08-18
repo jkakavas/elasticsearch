@@ -16,6 +16,7 @@ import org.elasticsearch.common.settings.SecureSetting;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
@@ -59,6 +60,8 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
     private final ReservedUserInfo bootstrapUserInfo;
     public static final Setting<SecureString> BOOTSTRAP_ELASTIC_PASSWORD = SecureSetting.secureString("bootstrap.password",
             KeyStoreWrapper.SEED_SETTING);
+    public static final Setting<SecureString> BOOTSTRAP_ELASTIC_PASSWORD_HASH = SecureSetting.secureString("bootstrap.password_hash",
+        null);
 
     private final NativeUsersStore nativeUsersStore;
     private final AnonymousUser anonymousUser;
@@ -81,9 +84,11 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
         this.anonymousEnabled = AnonymousUser.isAnonymousEnabled(settings);
         this.securityIndex = securityIndex;
         final Hasher reservedRealmHasher = Hasher.resolve(XPackSettings.PASSWORD_HASHING_ALGORITHM.get(settings));
-        final char[] hash = BOOTSTRAP_ELASTIC_PASSWORD.get(settings).length() == 0 ? new char[0] :
+        final char[] clearTextPasswordHash = BOOTSTRAP_ELASTIC_PASSWORD.get(settings).length() == 0 ? new char[0] :
             reservedRealmHasher.hash(BOOTSTRAP_ELASTIC_PASSWORD.get(settings));
-        bootstrapUserInfo = new ReservedUserInfo(hash, true);
+        final char[] hashedPassword = BOOTSTRAP_ELASTIC_PASSWORD_HASH.get(settings).length() == 0 ? new char[0] :
+            BOOTSTRAP_ELASTIC_PASSWORD_HASH.get(settings).getChars();
+        bootstrapUserInfo = new ReservedUserInfo(new Tuple<>(clearTextPasswordHash, hashedPassword), true);
     }
 
     @Override
@@ -107,8 +112,13 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
                             result = AuthenticationResult.terminate("failed to authenticate user [" + token.principal() + "]", null);
                         }
                     } finally {
-                        assert userInfo.passwordHash != bootstrapUserInfo.passwordHash : "bootstrap user info must be cloned";
-                        Arrays.fill(userInfo.passwordHash, (char) 0);
+                        assert userInfo.passwordHashes.v1() != bootstrapUserInfo.passwordHashes.v1()
+                            && userInfo.passwordHashes.v2() != bootstrapUserInfo.passwordHashes.v2()
+                            : "bootstrap user info must be cloned";
+
+                        Arrays.fill(userInfo.passwordHashes.v1(), (char) 0);
+                        Arrays.fill(userInfo.passwordHashes.v2(), (char) 0);
+
                     }
                 } else {
                     result = AuthenticationResult.terminate("failed to authenticate user [" + token.principal() + "]", null);
@@ -248,5 +258,6 @@ public class ReservedRealm extends CachingUsernamePasswordRealm {
 
     public static void addSettings(List<Setting<?>> settingsList) {
         settingsList.add(BOOTSTRAP_ELASTIC_PASSWORD);
+        settingsList.add(BOOTSTRAP_ELASTIC_PASSWORD_HASH);
     }
 }

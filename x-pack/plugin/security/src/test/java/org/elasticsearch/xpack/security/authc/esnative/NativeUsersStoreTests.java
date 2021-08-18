@@ -103,35 +103,6 @@ public class NativeUsersStoreTests extends ESTestCase {
         assertThat(upsertMap.get(User.Fields.PASSWORD.getPreferredName()), equalTo(BLANK_PASSWORD));
     }
 
-    public void testBlankPasswordInIndexImpliesDefaultPassword() throws Exception {
-        final NativeUsersStore nativeUsersStore = startNativeUsersStore();
-
-        final String user = randomFrom(ElasticUser.NAME, KibanaUser.NAME, KibanaSystemUser.NAME,
-            LogstashSystemUser.NAME, BeatsSystemUser.NAME, APMSystemUser.NAME, RemoteMonitoringUser.NAME);
-        final Map<String, Object> values = new HashMap<>();
-        values.put(ENABLED_FIELD, Boolean.TRUE);
-        values.put(PASSWORD_FIELD, BLANK_PASSWORD);
-
-        final GetResult result = new GetResult(
-                RestrictedIndicesNames.SECURITY_MAIN_ALIAS,
-                NativeUsersStore.getIdForUser(NativeUsersStore.RESERVED_USER_TYPE, randomAlphaOfLength(12)),
-            0, 1, 1L,
-                true,
-                BytesReference.bytes(jsonBuilder().map(values)),
-                Collections.emptyMap(),
-                Collections.emptyMap());
-
-        final PlainActionFuture<NativeUsersStore.ReservedUserInfo> future = new PlainActionFuture<>();
-        nativeUsersStore.getReservedUserInfo(user, future);
-
-        actionRespond(GetRequest.class, new GetResponse(result));
-
-        final NativeUsersStore.ReservedUserInfo userInfo = future.get();
-        assertThat(userInfo.hasEmptyPassword(), equalTo(true));
-        assertThat(userInfo.enabled, equalTo(true));
-        assertTrue(Hasher.verifyHash(new SecureString("".toCharArray()), userInfo.passwordHash));
-    }
-
     public void testVerifyUserWithCorrectPassword() throws Exception {
         final NativeUsersStore nativeUsersStore = startNativeUsersStore();
         final String username = randomAlphaOfLengthBetween(4, 12);
