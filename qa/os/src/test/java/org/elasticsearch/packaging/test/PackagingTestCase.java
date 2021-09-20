@@ -298,7 +298,7 @@ public abstract class PackagingTestCase extends Assert {
                 if (useTty) {
                     return Archives.startElasticsearchWithTty(installation, sh, password, daemonize);
                 } else {
-                    return Archives.runElasticsearchStartCommand(installation, sh, password, daemonize);
+                    return Archives.runElasticsearchStartCommand(installation, sh, password, List.of(), daemonize);
                 }
             case DEB:
             case RPM:
@@ -338,6 +338,10 @@ public abstract class PackagingTestCase extends Assert {
     }
 
     public void awaitElasticsearchStartup(Shell.Result result) throws Exception {
+        awaitElasticsearchStartup(installation ,result);
+    }
+
+    public void awaitElasticsearchStartup(Installation installation, Shell.Result result) throws Exception {
         assertThat("Startup command should succeed. Stderr: [" + result + "]", result.exitCode, equalTo(0));
         switch (distribution.packaging) {
             case TAR:
@@ -361,23 +365,17 @@ public abstract class PackagingTestCase extends Assert {
     }
 
     /**
-     * Call {@link PackagingTestCase#awaitElasticsearchStartup} and return a reference to the Shell.Result from
-     * starting elasticsearch
-     */
-    public Shell.Result awaitElasticsearchStartupWithResult(Shell.Result result) throws Exception {
-        awaitElasticsearchStartupWithResult(result, 0);
-        return result;
-    }
-
-    /**
      * Call {@link PackagingTestCase#awaitElasticsearchStartup} but wait {@code additionalDelay} milliseconds more before
      * returning the result. Useful in order to capture more from the stdout after ES has has successfully started
      */
-    public Shell.Result awaitElasticsearchStartupWithResult(Shell.Result result, int additionalDelay) throws Exception {
-        awaitElasticsearchStartup(result);
-        if (additionalDelay > 0) {
-            Thread.sleep(additionalDelay);
-        }
+    public Shell.Result awaitElasticsearchStartupWithResult(Shell.Result result) throws Exception {
+        awaitElasticsearchStartup(installation, result);
+        return result;
+    }
+
+    public Shell.Result awaitElasticsearchStartupWithResult(Installation installation, Shell.Result result)
+        throws Exception {
+        awaitElasticsearchStartup(installation, result);
         return result;
     }
 
