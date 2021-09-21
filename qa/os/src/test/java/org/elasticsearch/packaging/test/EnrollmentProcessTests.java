@@ -43,6 +43,7 @@ public class EnrollmentProcessTests extends PackagingTestCase {
     public void test10AutoFormCluster() throws Exception {
         firstNode = installArchive(sh, distribution(), getRootTempDir().resolve("elasticsearch-node1"), getCurrentVersion());
         verifyArchiveInstallation(firstNode, distribution());
+        sh.getEnv().put("ES_JAVA_OPTS", "-Xms2g -Xmx2g");
         Shell.Result startFirstNode = awaitElasticsearchStartupWithResult(
             firstNode,
             Archives.startElasticsearchWithTty(firstNode, sh, null, false)
