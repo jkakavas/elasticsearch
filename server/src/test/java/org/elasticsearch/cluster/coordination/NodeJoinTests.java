@@ -162,7 +162,7 @@ public class NodeJoinTests extends ESTestCase {
                             destination,
                             initialState.getClusterName()
                     ));
-                } else if (action.equals(JoinHelper.VALIDATE_JOIN_ACTION_NAME)) {
+                } else if (action.equals(JoinHelper.JOIN_VALIDATE_ACTION_NAME) || action.equals(JoinHelper.JOIN_PING_ACTION_NAME)) {
                     handleResponse(requestId, new TransportResponse.Empty());
                 } else {
                     super.onSendRequest(requestId, action, request, destination);
@@ -180,6 +180,7 @@ public class NodeJoinTests extends ESTestCase {
             clusterSettings,
             new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService()),
             transportService,
+            null,
             writableRegistry(),
             ESAllocationTestCase.createAllocationService(Settings.EMPTY),
             masterService,

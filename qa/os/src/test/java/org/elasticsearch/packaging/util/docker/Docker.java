@@ -44,6 +44,7 @@ import static java.nio.file.attribute.PosixFilePermissions.fromString;
 import static org.elasticsearch.packaging.util.FileMatcher.Fileness.Directory;
 import static org.elasticsearch.packaging.util.FileMatcher.p444;
 import static org.elasticsearch.packaging.util.FileMatcher.p555;
+import static org.elasticsearch.packaging.util.FileMatcher.p660;
 import static org.elasticsearch.packaging.util.FileMatcher.p664;
 import static org.elasticsearch.packaging.util.FileMatcher.p770;
 import static org.elasticsearch.packaging.util.FileMatcher.p775;
@@ -66,8 +67,8 @@ public class Docker {
 
     public static final Shell sh = new Shell();
     public static final DockerShell dockerShell = new DockerShell();
-    public static final int STARTUP_SLEEP_INTERVAL_MILLISECONDS = 2000;
-    public static final int STARTUP_ATTEMPTS_MAX = 10;
+    public static final int STARTUP_SLEEP_INTERVAL_MILLISECONDS = 1000;
+    public static final int STARTUP_ATTEMPTS_MAX = 20;
 
     /**
      * Tracks the currently running Docker image. An earlier implementation used a fixed container name,
@@ -436,8 +437,9 @@ public class Docker {
 
         Stream.of("jvm.options", "log4j2.properties", "role_mapping.yml", "roles.yml", "users", "users_roles")
             .forEach(configFile -> assertThat(es.config(configFile), file("root", "root", p664)));
-        // We write to the elasticsearch.yml file in ConfigInitialNode so it gets owned by elasticsearch.
+        // We write to the elasticsearch.yml and elasticsearch.keystore in ConfigInitialNode so it gets owned by elasticsearch.
         assertThat(es.config("elasticsearch.yml"), file("elasticsearch", "root", p664));
+        assertThat(es.config("elasticsearch.keystore"), file("elasticsearch", "root", p660));
 
         Stream.of("LICENSE.txt", "NOTICE.txt", "README.asciidoc")
             .forEach(doc -> assertThat(es.home.resolve(doc), file("root", "root", p444)));
@@ -490,6 +492,14 @@ public class Docker {
         waitForElasticsearch(installation, username, password, null);
     }
 
+    /**
+     * Waits for the Elasticsearch cluster status to turn green.
+     *
+     * @param installation the installation to check
+     * @param username the username to authenticate with
+     * @param password the password to authenticate with
+     * @param caCert the CA cert to trust
+     */
     public static void waitForElasticsearch(Installation installation, String username, String password, Path caCert) {
         try {
             withLogging(() -> ServerUtils.waitForElasticsearch("green", null, installation, username, password, caCert));
@@ -544,6 +554,17 @@ public class Docker {
         return mapper.readTree(pluginsResponse);
     }
 
+    /**
+     * Fetches the resource from the specified {@code path} on {@code http(s)://localhost:9200}, using
+     * the supplied authentication credentials.
+     *
+     * @param path the path to fetch
+     * @param user the user to authenticate with
+     * @param password the password to authenticate with
+     * @param caCert CA cert to trust, if non-null use the https URL
+     * @return a parsed JSON response
+     * @throws Exception if something goes wrong
+     */
     public static JsonNode getJson(String path, String user, String password, @Nullable Path caCert) throws Exception {
         path = Objects.requireNonNull(path, "path can not be null").trim();
         if (path.isEmpty()) {
@@ -618,7 +639,7 @@ public class Docker {
         sh.run("docker restart " + containerId);
     }
 
-    public static PosixFileAttributes getAttributes(Path path) throws FileNotFoundException {
+    static PosixFileAttributes getAttributes(Path path) throws FileNotFoundException {
         final Shell.Result result = dockerShell.runIgnoreExitCode("stat -c \"%U %G %A\" " + path);
         if (result.isSuccess() == false) {
             throw new FileNotFoundException(path + " does not exist");

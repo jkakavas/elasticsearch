@@ -15,6 +15,10 @@ import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.admin.cluster.node.hotthreads.NodesHotThreadsAction;
+import org.elasticsearch.action.admin.cluster.node.hotthreads.TransportNodesHotThreadsAction;
+import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
@@ -68,6 +72,8 @@ import org.elasticsearch.test.disruption.DisruptableMockTransport.ConnectionStat
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportInterceptor;
+import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
@@ -102,6 +108,7 @@ import java.util.stream.Stream;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singleton;
+import static java.util.Collections.singletonMap;
 import static org.elasticsearch.cluster.coordination.AbstractCoordinatorTestCase.Cluster.DEFAULT_DELAY_VARIABILITY;
 import static org.elasticsearch.cluster.coordination.ClusterBootstrapService.BOOTSTRAP_PLACEHOLDER_PREFIX;
 import static org.elasticsearch.cluster.coordination.CoordinationStateTestCluster.clusterState;
@@ -134,6 +141,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.oneOf;
 import static org.hamcrest.Matchers.sameInstance;
 
 public class AbstractCoordinatorTestCase extends ESTestCase {
@@ -980,6 +988,37 @@ public class AbstractCoordinatorTestCase extends ESTestCase {
                         return clusterNodes.stream().map(cn -> cn.mockTransport)
                             .filter(transport -> transport.getLocalNode().getAddress().equals(address)).findAny();
                     }
+
+                    @Override
+                    protected void onSendRequest(
+                        long requestId,
+                        String action,
+                        TransportRequest request,
+                        TransportRequestOptions options,
+                        DisruptableMockTransport destinationTransport
+                    ) {
+                        final TransportRequestOptions.Type chanType = options.type();
+                        switch (action) {
+                            case JoinHelper.JOIN_ACTION_NAME:
+                            case FollowersChecker.FOLLOWER_CHECK_ACTION_NAME:
+                            case LeaderChecker.LEADER_CHECK_ACTION_NAME:
+                                assertThat(action, chanType, equalTo(TransportRequestOptions.Type.PING));
+                                break;
+                            case JoinHelper.JOIN_VALIDATE_ACTION_NAME:
+                            case PublicationTransportHandler.PUBLISH_STATE_ACTION_NAME:
+                            case PublicationTransportHandler.COMMIT_STATE_ACTION_NAME:
+                                assertThat(action, chanType, equalTo(TransportRequestOptions.Type.STATE));
+                                break;
+                            case JoinHelper.JOIN_PING_ACTION_NAME:
+                                assertThat(action, chanType, oneOf(TransportRequestOptions.Type.STATE, TransportRequestOptions.Type.PING));
+                                break;
+                            default:
+                                assertThat(action, chanType, equalTo(TransportRequestOptions.Type.REG));
+                                break;
+                        }
+
+                        super.onSendRequest(requestId, action, request, options, destinationTransport);
+                    }
                 };
                 final Settings settings = nodeSettings.hasValue(DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey()) ?
                     nodeSettings : Settings.builder().put(nodeSettings)
@@ -999,12 +1038,24 @@ public class AbstractCoordinatorTestCase extends ESTestCase {
                     Collections.singletonList((dn, cs) -> extraJoinValidators.forEach(validator -> validator.accept(dn, cs)));
                 final AllocationService allocationService = ESAllocationTestCase.createAllocationService(Settings.EMPTY);
                 delegatingBigArrays = new DelegatingBigArrays(bigArrays);
+                final NodeClient client = new NodeClient(Settings.EMPTY, threadPool);
+                client.initialize(
+                    singletonMap(
+                        NodesHotThreadsAction.INSTANCE,
+                        new TransportNodesHotThreadsAction(threadPool, clusterService, transportService, new ActionFilters(emptySet()))
+                    ),
+                    transportService.getTaskManager(),
+                    localNode::getId,
+                    transportService.getLocalNodeConnection(),
+                    null,
+                    getNamedWriteableRegistry());
                 coordinator = new Coordinator(
                     "test_node",
                     settings,
                     clusterSettings,
                     delegatingBigArrays,
                     transportService,
+                    client,
                     getNamedWriteableRegistry(),
                     allocationService,
                     masterService,
@@ -1017,8 +1068,7 @@ public class AbstractCoordinatorTestCase extends ESTestCase {
                     getElectionStrategy(),
                     nodeHealthService);
                 masterService.setClusterStatePublisher(coordinator);
-                final GatewayService gatewayService
-                    = new GatewayService(settings, allocationService, clusterService, threadPool, coordinator, null);
+                final GatewayService gatewayService = new GatewayService(settings, allocationService, clusterService, threadPool);
 
                 logger.trace("starting up [{}]", localNode);
                 transportService.start();
@@ -1258,6 +1308,14 @@ public class AbstractCoordinatorTestCase extends ESTestCase {
 
             ClusterState getLastAppliedClusterState() {
                 return clusterApplierService.state();
+            }
+
+            void addActionBlock(@SuppressWarnings("SameParameterValue") String actionName) {
+                mockTransport.addActionBlock(actionName);
+            }
+
+            void clearActionBlocks() {
+                mockTransport.clearActionBlocks();
             }
 
             void applyInitialConfiguration() {

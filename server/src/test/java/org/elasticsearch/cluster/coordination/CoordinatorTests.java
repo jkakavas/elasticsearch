@@ -35,7 +35,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.Settings.Builder;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
 import org.elasticsearch.common.util.set.Sets;
-import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.discovery.DiscoveryModule;
@@ -43,6 +43,7 @@ import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.monitor.NodeHealthService;
 import org.elasticsearch.monitor.StatusInfo;
 import org.elasticsearch.test.MockLogAppender;
+import org.elasticsearch.test.junit.annotations.TestLogging;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -1353,6 +1354,53 @@ public class CoordinatorTests extends AbstractCoordinatorTestCase {
         }
     }
 
+    public void testNodeCannotJoinIfJoinPingValidationFailsOnMaster() throws IllegalAccessException {
+        try (Cluster cluster = new Cluster(randomIntBetween(1, 3))) {
+            cluster.runRandomly();
+            cluster.stabilise();
+
+            cluster.getAnyLeader().addActionBlock(JoinHelper.JOIN_PING_ACTION_NAME);
+
+            // check that if node ping join validation fails on master, the nodes can't join
+            List<ClusterNode> addedNodes = cluster.addNodes(randomIntBetween(1, 2));
+            final long previousClusterStateVersion = cluster.getAnyLeader().getLastAppliedClusterState().version();
+
+            MockLogAppender mockAppender = new MockLogAppender();
+            mockAppender.start();
+            Logger joinLogger = LogManager.getLogger(JoinHelper.class);
+            Logger coordinatorLogger = LogManager.getLogger(Coordinator.class);
+            Loggers.addAppender(joinLogger, mockAppender);
+            Loggers.addAppender(coordinatorLogger, mockAppender);
+            try {
+                mockAppender.addExpectation(
+                    new MockLogAppender.SeenEventExpectation(
+                        "failed to join",
+                        JoinHelper.class.getCanonicalName(),
+                        Level.INFO,
+                        "*failed to join*"));
+                mockAppender.addExpectation(
+                    new MockLogAppender.SeenEventExpectation(
+                        "failed to ping",
+                        Coordinator.class.getCanonicalName(),
+                        Level.WARN,
+                        "*failed to ping joining node*"));
+                cluster.runFor(10000, "failing joins");
+                mockAppender.assertAllExpectationsMatched();
+            } finally {
+                Loggers.removeAppender(coordinatorLogger, mockAppender);
+                Loggers.removeAppender(joinLogger, mockAppender);
+                mockAppender.stop();
+            }
+
+            assertTrue(addedNodes.stream().allMatch(ClusterNode::isCandidate));
+            final long newClusterStateVersion = cluster.getAnyLeader().getLastAppliedClusterState().version();
+            assertEquals(previousClusterStateVersion, newClusterStateVersion);
+
+            cluster.getAnyLeader().clearActionBlocks();
+            cluster.stabilise();
+        }
+    }
+
     public void testNodeCannotJoinIfJoinValidationFailsOnJoiningNode() {
         try (Cluster cluster = new Cluster(randomIntBetween(1, 3))) {
             cluster.runRandomly();
@@ -1730,6 +1778,7 @@ public class CoordinatorTests extends AbstractCoordinatorTestCase {
         }
     }
 
+    @TestLogging(reason="testing debug logging of LagDetector", value="org.elasticsearch.cluster.coordination.LagDetector:DEBUG")
     public void testLogsMessagesIfPublicationDelayed() throws IllegalAccessException {
         try (Cluster cluster = new Cluster(between(3, 5))) {
             cluster.runRandomly();
@@ -1757,6 +1806,14 @@ public class CoordinatorTests extends AbstractCoordinatorTestCase {
                     "node [" + brokenNode + "] is lagging at cluster state version [*], " +
                         "although publication of cluster state version [*] completed [*] ago"));
 
+                mockLogAppender.addExpectation(new MockLogAppender.SeenEventExpectation(
+                    "hot threads from lagging node",
+                    LagDetector.class.getCanonicalName(),
+                    Level.DEBUG,
+                    "hot threads from node [" +
+                        brokenNode.getLocalNode().descriptionWithoutAttributes() +
+                        "] lagging at version [*] despite commit of cluster state version [*]:\nHot threads at*"));
+
                 // drop the publication messages to one node, but then restore connectivity so it remains in the cluster and does not fail
                 // health checks
                 brokenNode.blackhole();
@@ -1775,7 +1832,8 @@ public class CoordinatorTests extends AbstractCoordinatorTestCase {
                     });
                 cluster.getAnyLeader().submitValue(randomLong());
                 cluster.runFor(defaultMillis(PUBLISH_TIMEOUT_SETTING) + 2 * DEFAULT_DELAY_VARIABILITY
-                        + defaultMillis(LagDetector.CLUSTER_FOLLOWER_LAG_TIMEOUT_SETTING) + DEFAULT_DELAY_VARIABILITY,
+                        + defaultMillis(LagDetector.CLUSTER_FOLLOWER_LAG_TIMEOUT_SETTING) + DEFAULT_DELAY_VARIABILITY
+                        + 2 * DEFAULT_DELAY_VARIABILITY,
                     "waiting for messages to be emitted");
 
                 mockLogAppender.assertAllExpectationsMatched();

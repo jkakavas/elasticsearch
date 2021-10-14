@@ -25,8 +25,8 @@ import org.apache.lucene.search.NormsFieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.spans.SpanMultiTermQueryWrapper;
-import org.apache.lucene.search.spans.SpanQuery;
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
+import org.apache.lucene.queries.spans.SpanQuery;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.core.Nullable;
@@ -170,6 +170,13 @@ public abstract class MappedFieldType {
      */
     public boolean isDimension() {
         return false;
+    }
+
+    /**
+     * @return metric type or null if the field is not a metric field
+     */
+    public TimeSeriesParams.MetricType getMetricType() {
+        return null;
     }
 
     /** Generates a query that will only match documents that contain the given value.

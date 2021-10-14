@@ -9,10 +9,12 @@
 package org.elasticsearch.packaging.test;
 
 import org.apache.http.client.fluent.Request;
+import org.elasticsearch.packaging.util.Distribution;
 import org.elasticsearch.packaging.util.FileUtils;
 import org.elasticsearch.packaging.util.Installation;
 import org.elasticsearch.packaging.util.Platforms;
 import org.elasticsearch.packaging.util.ServerUtils;
+import org.elasticsearch.packaging.util.Shell;
 import org.elasticsearch.packaging.util.Shell.Result;
 import org.junit.BeforeClass;
 
@@ -20,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,7 +36,6 @@ import static org.elasticsearch.packaging.util.FileExistenceMatchers.fileExists;
 import static org.elasticsearch.packaging.util.FileUtils.append;
 import static org.elasticsearch.packaging.util.FileUtils.mv;
 import static org.elasticsearch.packaging.util.FileUtils.rm;
-import static org.elasticsearch.packaging.util.ServerUtils.makeRequest;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
@@ -50,16 +52,26 @@ public class ArchiveTests extends PackagingTestCase {
         assumeTrue("only archives", distribution.isArchive());
     }
 
-    private static String superuser = "test_superuser";
-    private static String superuserPassword = "test_superuser";
-
     public void test10Install() throws Exception {
         installation = installArchive(sh, distribution());
         verifyArchiveInstallation(installation, distribution());
-        Result result = sh.run(
-            installation.executables().usersTool + " useradd " + superuser + " -p " + superuserPassword + " -r " + "superuser"
-        );
-        assumeTrue(result.isSuccess());
+        setFileSuperuser("test_superuser", "test_superuser_password");
+        // See https://bugs.openjdk.java.net/browse/JDK-8267701. In short, when generating PKCS#12 keystores in JDK 12 and later
+        // the MAC algorithm used for integrity protection is incompatible with any previous JDK version. This affects us as we generate
+        // PKCS12 keystores on startup ( with the bundled JDK ) but we also need to run certain tests with a JDK other than the bundled
+        // one, and we still use JDK11 for that.
+        // We're manually setting the HMAC algorithm to something that is compatible with previous versions here. Moving forward, when
+        // min compat JDK is JDK17, we can remove this hack and use the standard security properties file.
+        final Path jdkSecurityProperties = installation.bundledJdk.resolve("conf").resolve("security").resolve("java.security");
+        List<String> lines;
+        try (Stream<String> allLines = Files.readAllLines(jdkSecurityProperties).stream()) {
+            lines = allLines.filter(s -> s.startsWith("#keystore.pkcs12.macAlgorithm") == false)
+                .filter(s -> s.startsWith("#keystore.pkcs12.macIterationCount") == false)
+                .collect(Collectors.toList());
+        }
+        lines.add("keystore.pkcs12.macAlgorithm = HmacPBESHA1");
+        lines.add("keystore.pkcs12.macIterationCount = 100000");
+        Files.write(jdkSecurityProperties, lines, TRUNCATE_EXISTING);
     }
 
     public void test20PluginsListWithNoPlugins() throws Exception {
@@ -117,19 +129,170 @@ public class ArchiveTests extends PackagingTestCase {
         }
     }
 
-    public void test50StartAndStop() throws Exception {
-        // cleanup from previous test
-        rm(installation.config("elasticsearch.keystore"));
+    public void test40AutoconfigurationNotTriggeredWhenNodeIsMeantToJoinExistingCluster() throws Exception {
+        // auto-config requires that the archive owner and the process user be the same,
+        Platforms.onWindows(() -> sh.chown(installation.config, installation.getOwner()));
+        FileUtils.assertPathsDoNotExist(installation.data);
+        ServerUtils.addSettingToExistingConfiguration(installation, "discovery.seed_hosts", "[\"127.0.0.1:9300\"]");
+        startElasticsearch();
+        verifySecurityNotAutoConfigured(installation);
+        stopElasticsearch();
+        ServerUtils.removeSettingFromExistingConfiguration(installation, "discovery.seed_hosts");
+        Platforms.onWindows(() -> sh.chown(installation.config));
+        FileUtils.rm(installation.data);
+    }
+
+    public void test41AutoconfigurationNotTriggeredWhenNodeCannotContainData() throws Exception {
+        // auto-config requires that the archive owner and the process user be the same
+        Platforms.onWindows(() -> sh.chown(installation.config, installation.getOwner()));
+        ServerUtils.addSettingToExistingConfiguration(installation, "node.roles", "[\"voting_only\", \"master\"]");
+        startElasticsearch();
+        verifySecurityNotAutoConfigured(installation);
+        stopElasticsearch();
+        ServerUtils.removeSettingFromExistingConfiguration(installation, "node.roles");
+        Platforms.onWindows(() -> sh.chown(installation.config));
+        FileUtils.rm(installation.data);
+    }
+
+    public void test42AutoconfigurationNotTriggeredWhenNodeCannotBecomeMaster() throws Exception {
+        // auto-config requires that the archive owner and the process user be the same
+        Platforms.onWindows(() -> sh.chown(installation.config, installation.getOwner()));
+        ServerUtils.addSettingToExistingConfiguration(installation, "node.roles", "[\"ingest\"]");
+        startElasticsearch();
+        verifySecurityNotAutoConfigured(installation);
+        stopElasticsearch();
+        ServerUtils.removeSettingFromExistingConfiguration(installation, "node.roles");
+        Platforms.onWindows(() -> sh.chown(installation.config));
+        FileUtils.rm(installation.data);
+    }
+
+    public void test43AutoconfigurationNotTriggeredWhenTlsAlreadyConfigured() throws Exception {
+        // auto-config requires that the archive owner and the process user be the same
+        Platforms.onWindows(() -> sh.chown(installation.config, installation.getOwner()));
+        ServerUtils.addSettingToExistingConfiguration(installation, "xpack.security.http.ssl.enabled", "false");
+        startElasticsearch();
+        verifySecurityNotAutoConfigured(installation);
+        stopElasticsearch();
+        ServerUtils.removeSettingFromExistingConfiguration(installation, "xpack.security.http.ssl.enabled");
+        Platforms.onWindows(() -> sh.chown(installation.config));
+        FileUtils.rm(installation.data);
+    }
+
+    public void test44AutoConfigurationNotTriggeredOnNotWriteableConfDir() throws Exception {
+        Platforms.onWindows(() -> {
+            // auto-config requires that the archive owner and the process user be the same
+            sh.chown(installation.config, installation.getOwner());
+            // prevent modifications to the config directory
+            sh.run(
+                String.format(
+                    Locale.ROOT,
+                    "$ACL = Get-ACL -Path '%s'; "
+                        + "$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule('%s','Write','Deny'); "
+                        + "$ACL.SetAccessRule($AccessRule); "
+                        + "$ACL | Set-Acl -Path '%s';",
+                    installation.config,
+                    installation.getOwner(),
+                    installation.config
+                )
+            );
+        });
+        Platforms.onLinux(() -> { sh.run("chmod u-w " + installation.config); });
+        try {
+            startElasticsearch();
+            verifySecurityNotAutoConfigured(installation);
+            // the node still starts, with Security enabled, but without TLS auto-configured (so only authentication)
+            runElasticsearchTests();
+            stopElasticsearch();
+        } finally {
+            Platforms.onWindows(() -> {
+                sh.run(
+                    String.format(
+                        Locale.ROOT,
+                        "$ACL = Get-ACL -Path '%s'; "
+                            + "$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule('%s','Write','Deny'); "
+                            + "$ACL.RemoveAccessRule($AccessRule); "
+                            + "$ACL | Set-Acl -Path '%s';",
+                        installation.config,
+                        installation.getOwner(),
+                        installation.config
+                    )
+                );
+                sh.chown(installation.config);
+            });
+            Platforms.onLinux(() -> { sh.run("chmod u+w " + installation.config); });
+            FileUtils.rm(installation.data);
+        }
+    }
+
+    public void test50AutoConfigurationFailsWhenCertificatesNotGenerated() throws Exception {
+        // auto-config requires that the archive owner and the process user be the same
+        Platforms.onWindows(() -> sh.chown(installation.config, installation.getOwner()));
+        FileUtils.assertPathsDoNotExist(installation.data);
+        Path tempDir = createTempDir("bc-backup");
+        Files.move(
+            installation.lib.resolve("tools").resolve("security-cli").resolve("bcprov-jdk15on-1.64.jar"),
+            tempDir.resolve("bcprov-jdk15on-1.64.jar")
+        );
+        Shell.Result result = runElasticsearchStartCommand(null, false, false);
+        assertElasticsearchFailure(result, "java.lang.NoClassDefFoundError: org/bouncycastle/asn1/x509/GeneralName", null);
+        Files.move(
+            tempDir.resolve("bcprov-jdk15on-1.64.jar"),
+            installation.lib.resolve("tools").resolve("security-cli").resolve("bcprov-jdk15on-1.64.jar")
+        );
+        Platforms.onWindows(() -> sh.chown(installation.config));
+        FileUtils.rm(tempDir);
+    }
+
+    public void test51AutoConfigurationWithPasswordProtectedKeystore() throws Exception {
+        /* Windows issue awaits fix: https://github.com/elastic/elasticsearch/issues/49340 */
+        assumeTrue("expect command isn't on Windows", distribution.platform != Distribution.Platform.WINDOWS);
+        FileUtils.assertPathsDoNotExist(installation.data);
+        final Installation.Executables bin = installation.executables();
+        final String password = "some-keystore-password";
+        Platforms.onLinux(() -> bin.keystoreTool.run("passwd", password + "\n" + password + "\n"));
+        Platforms.onWindows(
+            () -> {
+                sh.run("Invoke-Command -ScriptBlock {echo '" + password + "'; echo '" + password + "'} | " + bin.keystoreTool + " passwd");
+            }
+        );
+        Shell.Result result = runElasticsearchStartCommand("some-wrong-password-here", false, false);
+        assertElasticsearchFailure(result, "Provided keystore password was incorrect", null);
+        verifySecurityNotAutoConfigured(installation);
+
+        awaitElasticsearchStartup(runElasticsearchStartCommand(password, true, true));
+        verifySecurityAutoConfigured(installation);
+
+        stopElasticsearch();
+
+        // Revert to an empty password for the rest of the tests
+        Platforms.onLinux(() -> bin.keystoreTool.run("passwd", password + "\n" + "" + "\n"));
+        Platforms.onWindows(
+            () -> sh.run("Invoke-Command -ScriptBlock {echo '" + password + "'; echo '" + "" + "'} | " + bin.keystoreTool + " passwd")
+        );
+    }
+
+    public void test52AutoConfigurationOnWindows() throws Exception {
+        assumeTrue(
+            "run this in place of test51AutoConfigurationWithPasswordProtectedKeystore on windows",
+            distribution.platform == Distribution.Platform.WINDOWS
+        );
+        sh.chown(installation.config, installation.getOwner());
+        FileUtils.assertPathsDoNotExist(installation.data);
 
         startElasticsearch();
+        verifySecurityAutoConfigured(installation);
+        stopElasticsearch();
+        sh.chown(installation.config);
+    }
 
+    public void test60StartAndStop() throws Exception {
+        startElasticsearch();
         assertThat(installation.logs.resolve("gc.log"), fileExists());
-        ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
-
+        runElasticsearchTests();
         stopElasticsearch();
     }
 
-    public void test51EsJavaHomeOverride() throws Exception {
+    public void test61EsJavaHomeOverride() throws Exception {
         Platforms.onLinux(() -> {
             String systemJavaHome1 = sh.run("echo $SYSTEM_JAVA_HOME").stdout.trim();
             sh.getEnv().put("ES_JAVA_HOME", systemJavaHome1);
@@ -140,14 +303,14 @@ public class ArchiveTests extends PackagingTestCase {
         });
 
         startElasticsearch();
-        ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+        runElasticsearchTests();
         stopElasticsearch();
 
         String systemJavaHome1 = sh.getEnv().get("ES_JAVA_HOME");
         assertThat(FileUtils.slurpAllLogs(installation.logs, "elasticsearch.log", "*.log.gz"), containsString(systemJavaHome1));
     }
 
-    public void test51JavaHomeIgnored() throws Exception {
+    public void test62JavaHomeIgnored() throws Exception {
         assumeTrue(distribution().hasJdk);
         Platforms.onLinux(() -> {
             String systemJavaHome1 = sh.run("echo $SYSTEM_JAVA_HOME").stdout.trim();
@@ -167,7 +330,7 @@ public class ArchiveTests extends PackagingTestCase {
         assertThat(runResult.stderr, containsString("warning: ignoring JAVA_HOME=" + systemJavaHome + "; using bundled JDK"));
 
         startElasticsearch();
-        ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+        runElasticsearchTests();
         stopElasticsearch();
 
         // if the JDK started with the bundled JDK then we know that JAVA_HOME was ignored
@@ -175,7 +338,7 @@ public class ArchiveTests extends PackagingTestCase {
         assertThat(FileUtils.slurpAllLogs(installation.logs, "elasticsearch.log", "*.log.gz"), containsString(bundledJdk));
     }
 
-    public void test52BundledJdkRemoved() throws Exception {
+    public void test63BundledJdkRemoved() throws Exception {
         assumeThat(distribution().hasJdk, is(true));
 
         Path relocatedJdk = installation.bundledJdk.getParent().resolve("jdk.relocated");
@@ -191,7 +354,7 @@ public class ArchiveTests extends PackagingTestCase {
             });
 
             startElasticsearch();
-            ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+            runElasticsearchTests();
             stopElasticsearch();
 
             String systemJavaHome1 = sh.getEnv().get("ES_JAVA_HOME");
@@ -201,7 +364,7 @@ public class ArchiveTests extends PackagingTestCase {
         }
     }
 
-    public void test53JavaHomeWithSpecialCharacters() throws Exception {
+    public void test64JavaHomeWithSpecialCharacters() throws Exception {
         Platforms.onWindows(() -> {
             String javaPath = "C:\\Program Files (x86)\\java";
             try {
@@ -212,7 +375,7 @@ public class ArchiveTests extends PackagingTestCase {
 
                 // verify ES can start, stop and run plugin list
                 startElasticsearch();
-                ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+                runElasticsearchTests();
                 stopElasticsearch();
 
                 String pluginListCommand = installation.bin + "/elasticsearch-plugin list";
@@ -237,7 +400,7 @@ public class ArchiveTests extends PackagingTestCase {
 
                 // verify ES can start, stop and run plugin list
                 startElasticsearch();
-                ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+                runElasticsearchTests();
                 stopElasticsearch();
 
                 String pluginListCommand = installation.bin + "/elasticsearch-plugin list";
@@ -249,13 +412,13 @@ public class ArchiveTests extends PackagingTestCase {
         });
     }
 
-    public void test54ForceBundledJdkEmptyJavaHome() throws Exception {
+    public void test65ForceBundledJdkEmptyJavaHome() throws Exception {
         assumeThat(distribution().hasJdk, is(true));
 
         sh.getEnv().put("ES_JAVA_HOME", "");
 
         startElasticsearch();
-        ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+        runElasticsearchTests();
         stopElasticsearch();
     }
 
@@ -264,41 +427,27 @@ public class ArchiveTests extends PackagingTestCase {
      * <p>
      * This test purposefully ignores the existence of the Windows POSIX sub-system.
      */
-    public void test55InstallUnderPosix() throws Exception {
-        assumeTrue("Only run this test on Unix-like systems", Platforms.WINDOWS == false);
+    public void test66InstallUnderPosix() throws Exception {
         sh.getEnv().put("POSIXLY_CORRECT", "1");
         startElasticsearch();
-        ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+        runElasticsearchTests();
         stopElasticsearch();
     }
 
     public void test70CustomPathConfAndJvmOptions() throws Exception {
-
         withCustomConfig(tempConf -> {
             setHeap("512m", tempConf);
             final List<String> jvmOptions = List.of("-Dlog4j2.disable.jmx=true");
             Files.write(tempConf.resolve("jvm.options"), jvmOptions, CREATE, APPEND);
 
             sh.getEnv().put("ES_JAVA_OPTS", "-XX:-UseCompressedOops");
-            // Auto-configuration file paths are absolute so we need to replace them in the config now that we copied them to tempConf
-            Path yml = tempConf.resolve("elasticsearch.yml");
-            List<String> lines;
-            try (Stream<String> allLines = Files.readAllLines(yml).stream()) {
-                lines = allLines.map(l -> {
-                    if (l.contains(installation.config.toString())) {
-                        return l.replace(installation.config.toString(), tempConf.toString());
-                    }
-                    return l;
-                }).collect(Collectors.toList());
-            }
-            Files.write(yml, lines, TRUNCATE_EXISTING);
             startElasticsearch();
 
-            final String nodesResponse = makeRequest(
+            final String nodesResponse = ServerUtils.makeRequest(
                 Request.Get("https://localhost:9200/_nodes"),
-                superuser,
-                superuserPassword,
-                ServerUtils.getCaCert(installation)
+                "test_superuser",
+                "test_superuser_password",
+                ServerUtils.getCaCert(tempConf)
             );
             assertThat(nodesResponse, containsString("\"heap_init_in_bytes\":536870912"));
             assertThat(nodesResponse, containsString("\"using_compressed_ordinary_object_pointers\":\"false\""));
@@ -315,12 +464,7 @@ public class ArchiveTests extends PackagingTestCase {
 
             startElasticsearch();
 
-            final String nodesResponse = makeRequest(
-                Request.Get("https://localhost:9200/_nodes"),
-                superuser,
-                superuserPassword,
-                ServerUtils.getCaCert(installation)
-            );
+            final String nodesResponse = makeRequest("https://localhost:9200/_nodes");
             assertThat(nodesResponse, containsString("\"heap_init_in_bytes\":536870912"));
 
             stopElasticsearch();
@@ -343,12 +487,7 @@ public class ArchiveTests extends PackagingTestCase {
 
             startElasticsearch();
 
-            final String nodesResponse = makeRequest(
-                Request.Get("https://localhost:9200/_nodes"),
-                superuser,
-                superuserPassword,
-                ServerUtils.getCaCert(installation)
-            );
+            final String nodesResponse = makeRequest("https://localhost:9200/_nodes");
             assertThat(nodesResponse, containsString("\"heap_init_in_bytes\":536870912"));
             assertThat(nodesResponse, containsString("\"using_compressed_ordinary_object_pointers\":\"false\""));
 
@@ -365,7 +504,7 @@ public class ArchiveTests extends PackagingTestCase {
             append(jvmOptionsIgnored, "-Xthis_is_not_a_valid_option\n");
 
             startElasticsearch();
-            ServerUtils.runElasticsearchTests(superuser, superuserPassword, ServerUtils.getCaCert(installation));
+            runElasticsearchTests();
             stopElasticsearch();
         } finally {
             rm(jvmOptionsIgnored);
@@ -373,29 +512,11 @@ public class ArchiveTests extends PackagingTestCase {
     }
 
     public void test80RelativePathConf() throws Exception {
-
         withCustomConfig(tempConf -> {
-            // Auto-configuration file paths are absolute so we need to replace them in the config now that we copied them to tempConf
-            Path yml = tempConf.resolve("elasticsearch.yml");
-            List<String> lines;
-            try (Stream<String> allLines = Files.readAllLines(yml).stream()) {
-                lines = allLines.map(l -> {
-                    if (l.contains(installation.config.toString())) {
-                        return l.replace(installation.config.toString(), tempConf.toString());
-                    }
-                    return l;
-                }).collect(Collectors.toList());
-            }
-            lines.add("node.name: relative");
-            Files.write(yml, lines, TRUNCATE_EXISTING);
+            append(tempConf.resolve("elasticsearch.yml"), "node.name: relative");
             startElasticsearch();
 
-            final String nodesResponse = makeRequest(
-                Request.Get("https://localhost:9200/_nodes"),
-                superuser,
-                superuserPassword,
-                ServerUtils.getCaCert(installation)
-            );
+            final String nodesResponse = makeRequest("https://localhost:9200/_nodes");
             assertThat(nodesResponse, containsString("\"name\":\"relative\""));
 
             stopElasticsearch();
