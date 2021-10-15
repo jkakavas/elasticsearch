@@ -322,7 +322,7 @@ public abstract class PackagingTestCase extends Assert {
                 if (useTty) {
                     return Archives.startElasticsearchWithTty(installation, sh, password, daemonize);
                 } else {
-                    return Archives.runElasticsearchStartCommand(installation, sh, password, List.of(), daemonize);
+                    return Archives.runElasticsearchStartCommand(installation, sh, password, daemonize);
                 }
             case DEB:
             case RPM:
@@ -756,7 +756,7 @@ public abstract class PackagingTestCase extends Assert {
             lsResult = sh.run("find \"" + es.config + "\" -type d -maxdepth 1");
         }
         assertNotNull(lsResult.stdout);
-        return Arrays.stream(lsResult.stdout.split("\n")).filter(f -> f.contains("tls_auto_config_initial_node_")).findFirst();
+        return Arrays.stream(lsResult.stdout.split("\n")).filter(f -> f.contains("tls_auto_config_")).findFirst();
     }
 
 }

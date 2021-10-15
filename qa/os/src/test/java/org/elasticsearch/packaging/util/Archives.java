@@ -37,8 +37,6 @@ import static org.elasticsearch.packaging.util.FileUtils.slurp;
 import static org.elasticsearch.packaging.util.Platforms.isDPKG;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.emptyOrNullString;
-import static org.hamcrest.collection.IsCollectionWithSize.hasSize;
-import static org.hamcrest.collection.IsEmptyCollection.empty;
 import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsNot.not;
 
@@ -223,7 +221,7 @@ public class Archives {
     }
 
     public static Shell.Result startElasticsearch(Installation installation, Shell sh) {
-        return runElasticsearchStartCommand(installation, sh, null, List.of(), true);
+        return runElasticsearchStartCommand(installation, sh, null, true);
     }
 
     public static Shell.Result startElasticsearchWithTty(Installation installation, Shell sh, String keystorePassword, boolean daemonize)
@@ -263,7 +261,6 @@ public class Archives {
         Installation installation,
         Shell sh,
         String keystorePassword,
-        List<String> parameters,
         boolean daemonize
     ) {
         final Path pidFile = installation.home.resolve("elasticsearch.pid");
@@ -293,9 +290,6 @@ public class Archives {
             command.add("-v"); // verbose auto-configuration
             command.add("-p");
             command.add(pidFile.toString());
-            if (parameters != null && parameters.isEmpty() == false) {
-                command.addAll(parameters);
-            }
             if (keystorePassword != null) {
                 command.add("<<<'" + keystorePassword + "'");
             }
