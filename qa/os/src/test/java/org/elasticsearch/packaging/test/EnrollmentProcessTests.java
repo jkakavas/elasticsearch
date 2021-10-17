@@ -36,10 +36,12 @@ public class EnrollmentProcessTests extends PackagingTestCase {
         Shell.Result startFirstNode = awaitElasticsearchStartupWithResult(
             Archives.startElasticsearchWithTty(installation, sh, null, false)
         );
+        // Capture auto-generated password of the elastic user from the node startup output
         final String elasticPassword = parseElasticPassword(startFirstNode.stdout);
         assertNotNull(elasticPassword);
+        // Verify that the first node was auto-configured for security
         verifySecurityAutoConfigured(installation);
-
+        // Generate a node enrollment token to be subsequently used by the second node
         Shell.Result createTokenResult = installation.executables().createEnrollmentToken.run("-s node");
         assertThat(Strings.isNullOrEmpty(createTokenResult.stdout), is(false));
         final String enrollmentToken = createTokenResult.stdout;
@@ -50,6 +52,7 @@ public class EnrollmentProcessTests extends PackagingTestCase {
             getRootTempDir().resolve("elasticsearch-node2"),
             getCurrentVersion()
         );
+        // auto-configure security using the enrollment token
         installation.executables().enrollToExistingCluster.run("--enrollment-token " + enrollmentToken);
         verifySecurityAutoConfigured(installation);
         Shell.Result startSecondNode = awaitElasticsearchStartupWithResult(
@@ -57,6 +60,7 @@ public class EnrollmentProcessTests extends PackagingTestCase {
         );
         assertThat(startSecondNode.exitCode, is(0));
         assertNull(parseElasticPassword(startSecondNode.stdout));
+        // verify that the two nodes formed a cluster
         assertThat(
             makeRequestAsElastic("https://localhost:9200/_cluster/health", elasticPassword),
             containsString("\"number_of_nodes\":2")
