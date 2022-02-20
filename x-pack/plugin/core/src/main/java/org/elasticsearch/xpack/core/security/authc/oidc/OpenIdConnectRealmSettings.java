@@ -212,6 +212,11 @@ public class OpenIdConnectRealmSettings {
         "http.max_endpoint_connections",
         key -> Setting.intSetting(key, 200, Setting.Property.NodeScope)
     );
+    public static final Setting.AffixSetting<Integer> HTTP_CONNECTION_POOL_TTL = Setting.affixKeySetting(
+        RealmSettings.realmSettingPrefix(TYPE),
+        "http.connection_pool_ttl",
+        key -> Setting.intSetting(key, -1, Setting.Property.NodeScope)
+    );
     public static final Setting.AffixSetting<String> HTTP_PROXY_HOST = Setting.affixKeySetting(
         RealmSettings.realmSettingPrefix(TYPE),
         "http.proxy.host",
@@ -307,6 +312,7 @@ public class OpenIdConnectRealmSettings {
             HTTP_SOCKET_TIMEOUT,
             HTTP_MAX_CONNECTIONS,
             HTTP_MAX_ENDPOINT_CONNECTIONS,
+            HTTP_CONNECTION_POOL_TTL,
             HTTP_PROXY_HOST,
             HTTP_PROXY_PORT,
             HTTP_PROXY_SCHEME,

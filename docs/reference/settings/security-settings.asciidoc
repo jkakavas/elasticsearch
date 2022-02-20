@@ -1816,6 +1816,18 @@ the OpenID Connect Provider endpoints. Specifies the maximum number of
 connections allowed per endpoint.
 // end::oidc-http-max-endpoint-connections-tag[]
 
+// tag::oidc-http-connection-pool-ttl-tag[]
+`http.connection_pool_ttl` {ess-icon}::
+(<<static-cluster-setting,Static>>)
+Controls the behavior of the http client used for back-channel communication to
+the OpenID Connect Provider endpoints. Specifies the time-to-live of connections
+in the connection pool. If a connection is not re-used within this timeout,
+it is closed. Usually, the server dictates this value using the `Keep-Alive` HTTP
+response header. If not set by the server, then the value of this setting is used.
+By default, the time-to-live is infinite meaning that connections
+never expire.
+// end::oidc-http-connection-pool-ttl-ta[]
+
 [discrete]
 [[ref-oidc-ssl-settings]]
 ===== OpenID Connect realm SSL settings
